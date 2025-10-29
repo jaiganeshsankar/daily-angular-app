@@ -1,0 +1,235 @@
+:host {
+	width: 100%;
+	height: 100%;
+	display: block;
+}
+
+.video-tile-container {
+	width: 100%;
+	height: 100%;
+	position: relative;
+	// background: #000;
+
+	&.speaking {
+		border-color: #22b07d !important;
+	}
+
+	video {
+		width: 100%;
+		height: 100%;
+		object-fit: contain !important; // Changed from cover to prevent cropping
+		// background: #000;
+
+		&.flip {
+			transform: scaleX(-1);
+		}
+	}
+
+	.video-footer {
+		bottom: 0;
+		left: 0;
+		right: 0;
+		background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+		z-index: 10;
+	}
+
+	.bg-black-gradient {
+		background: linear-gradient(180deg, #565656 0%, #1A1A1A 55.21%, #565656 100%);
+	}
+
+	.controls {
+		left: 43%;
+		position: absolute;
+		bottom: 20%;
+		gap: 12px;
+		display: flex;
+	}
+
+	/* Media Control Buttons */
+	.media-control {
+		background: black;
+		border: none;
+		color: #dee2e6;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		width: 36px;
+		height: 36px;
+		border-radius: 50%;
+		transition: background-color 0.2s, color 0.2s, transform 0.1s;
+	}
+
+	.media-control {
+		width: 32px;
+		height: 32px;
+	}
+
+	.media-control:hover:not([disabled]) {
+		background-color: rgba(255, 255, 255, 0.15);
+		color: #ffffff;
+	}
+
+	.media-control:active:not([disabled]) {
+		transform: scale(0.92);
+	}
+
+	.media-control[disabled] {
+		opacity: 0.35;
+		cursor: not-allowed;
+	}
+
+	.media-control img,
+	.media-control svg {
+		height: 20px;
+		width: 20px;
+	}
+
+	.media-control svg {
+		stroke: currentColor;
+		fill: none;
+	}
+
+	.media-control img {
+		filter: brightness(0) invert(0.9) sepia(0.1) saturate(0.5) hue-rotate(180deg);
+	}
+
+	.media-control:hover:not([disabled]) img {
+		filter: brightness(0) invert(1);
+	}
+
+	/* Specific Button States */
+	.media-control.active,
+	.screen-share-btn.active {
+		background-color: #667eea;
+		color: #ffffff;
+	}
+
+	.media-control.active img,
+	.screen-share-btn.active img {
+		filter: brightness(0) invert(1);
+	}
+
+	.media-control.active svg,
+	.screen-share-btn.active svg {
+		stroke: #ffffff;
+	}
+
+	.screen-share-btn.active:hover {
+		background-color: #556bb4;
+	}
+
+	/* Leave Call Button */
+	.leave-call-btn {
+		background-color: #dc3545 !important;
+		color: #ffffff !important;
+		margin-left: 4px;
+	}
+
+	.leave-call-btn:hover {
+		background-color: #c82333 !important;
+	}
+
+	.leave-call-btn img {
+		filter: brightness(0) invert(1) !important;
+	}
+
+	.participant-info {
+		position: absolute;
+		top: 8px;
+		left: 8px;
+		padding: 4px 8px;
+		display: flex;
+		background-color: rgba(20, 30, 40, 0.7);
+		backdrop-filter: blur(8px);
+		color: #e9ecef;
+		font-size: 12px;
+		border-radius: 14px;
+		align-items: center;
+		z-index: 10;
+		max-width: calc(100% - 16px);
+		transition: background-color 0.2s;
+	}
+
+	/* Role Change Button */
+	.role-change-btn {
+		background-color: transparent;
+		border: none;
+		color: #adb5bd;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 3px;
+		border-radius: 50%;
+		margin-right: 4px;
+		transition: all 0.2s;
+	}
+
+	.role-change-btn:hover {
+		background-color: rgba(255, 255, 255, 0.15);
+		color: #f8f9fa;
+	}
+
+	.role-change-btn .role-icon {
+		height: 14px;
+		width: 14px;
+	}
+
+	.role-change-btn svg {
+		stroke: currentColor;
+	}
+
+	/* Role Label */
+	.role-label {
+		padding: 2px 7px;
+		border-radius: 10px;
+		font-size: 9px;
+		font-weight: 600;
+		text-transform: uppercase;
+		margin-right: 5px;
+		line-height: 1.3;
+		letter-spacing: 0.5px;
+		border: 1px solid transparent;
+	}
+
+	.role-label.stage {
+		background-color: rgba(102, 126, 234, 0.2);
+		color: #8c9eff;
+		border-color: rgba(102, 126, 234, 0.4);
+	}
+
+	.role-label.backstage {
+		background-color: rgba(108, 117, 125, 0.2);
+		color: #adb5bd;
+		border-color: rgba(108, 117, 125, 0.4);
+	}
+
+	/* Participant Name */
+	.participant-info .name {
+		margin: 0 6px 0 0;
+		line-height: 1.4;
+		white-space: nowrap;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		font-weight: 500;
+	}
+
+	/* Mic Icon */
+	.participant-info .mic-status-icon {
+		height: 16px;
+		width: 16px;
+		flex-shrink: 0;
+		opacity: 0.8;
+		margin-left: 4px;
+		filter: invert(90%) sepia(6%) saturate(146%) hue-rotate(174deg) brightness(95%) contrast(89%);
+	}
+
+	/* Screen Share Badge */
+	.screen-share-badge {
+		color: #1ceab1;
+		font-weight: 500;
+		margin-left: 4px;
+		font-size: 0.9em;
+	}
+}

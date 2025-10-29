@@ -1,0 +1,26 @@
+<header>
+  <div class="container">
+    <div class="row">
+      <div class="left-section">
+        <div class="divider"></div>
+        <img height="24" src="../assets/angular.svg" alt="Angular logo" />
+        <span class="header-title">Daily Angular Demo</span>
+      </div>
+      <div class="right-section">
+        <button *ngIf="isJoined" class="go-live-btn" [class.live]="isLive" (click)="toggleLiveStream()" 
+          [title]="isLive ? 'End Live' : 'Go Live'">
+          <span>{{ isLive ? 'End Live' : 'Go Live' }}</span>
+          <div *ngIf="isLive" class="live-dot"></div>
+        </button>
+      </div>
+    </div>
+  </div>
+</header>
+
+<main class="content">
+  <router-outlet></router-outlet>
+</main>
+
+<main class="content">
+  <router-outlet></router-outlet>
+</main>

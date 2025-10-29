@@ -1,0 +1,3 @@
+<join-form *ngIf="!dailyRoomUrl" (setUserName)="setUserName($event)" (setUrl)="setUrl($event)"></join-form>
+<app-video-call *ngIf="dailyRoomUrl" [userName]="userName" [dailyRoomUrl]="dailyRoomUrl"
+    (callEnded)="callEnded()"></app-video-call>

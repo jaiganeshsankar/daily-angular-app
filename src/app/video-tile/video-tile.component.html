@@ -1,0 +1,90 @@
+<div class="video-tile-container" [class.local-participant]="local" [class.sidebar-tile]="sidebarView"
+  [class.screen-share-tile]="screenShareView">
+
+  <video *ngIf="screenShareView && screenVideoTrack && screenVideoReady" autoPlay muted playsInline
+    class="video-element screen-share-video" [srcObject]="screenVideoStream"></video>
+
+  <video *ngIf="!screenShareView && videoStream && videoReady" autoPlay muted playsInline
+    class="video-element camera-video" [srcObject]="videoStream"></video>
+
+  <div class="video-placeholder" *ngIf="(!screenShareView && !videoReady) || (screenShareView && !screenVideoReady)">
+    <img src="../../assets/vid_off.svg" alt="Camera is off" />
+  </div>
+
+  <audio *ngIf="audioStream && !local" autoPlay playsInline [srcObject]="audioStream">
+    <track kind="captions" />
+  </audio>
+  <audio *ngIf="screenAudioStream && !local" autoPlay playsInline [srcObject]="screenAudioStream">
+    <track kind="captions" />
+  </audio>
+
+  <div class="participant-info">
+    <button class="role-change-btn" (click)="handleRoleChangeClick()"
+      [title]="role === 'stage' ? 'Move to Backstage' : 'Move to Stage'">
+      <svg *ngIf="role === 'backstage'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+        class="role-icon">
+        <line x1="12" y1="19" x2="12" y2="5"></line>
+        <polyline points="5 12 12 5 19 12"></polyline>
+      </svg>
+      <svg *ngIf="role === 'stage'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+        class="role-icon">
+        <line x1="12" y1="5" x2="12" y2="19"></line>
+        <polyline points="19 12 12 19 5 12"></polyline>
+      </svg>
+    </button>
+    <!-- <span class="role-label" [class.stage]="role === 'stage'" [class.backstage]="role === 'backstage'">
+      {{ role === 'stage' ? 'Stage' : 'Backstage' }}
+    </span> -->
+    <p class="name">
+      {{ userName }}
+      <span *ngIf="screenShareView" class="screen-share-badge">(Presenting)</span>
+    </p>
+    <img *ngIf="!audioReady && !local" src="../../assets/mic_off.svg" alt="Mic is off" title="Mic is off"
+      class="mic-status-icon" />
+  </div>
+
+  <div *ngIf="local && joined" id="controls">
+    <button class="media-control" title="{{ videoReady ? 'Turn video off' : 'Turn video on' }}"
+      (click)="handleToggleVideoClick()">
+      <img *ngIf="!videoReady" src="../../assets/vid_off.svg" alt="Turn video on" />
+      <img *ngIf="videoReady" src="../../assets/vid_on.svg" alt="Turn video off" />
+    </button>
+    <button class="media-control" title="{{ audioReady ? 'Turn mic off' : 'Turn mic on' }}"
+      (click)="handleToggleAudioClick()">
+      <img *ngIf="!audioReady" src="../../assets/mic_off.svg" alt="Turn mic on" />
+      <img *ngIf="audioReady" src="../../assets/mic_on.svg" alt="Turn mic off" />
+    </button>
+    <button class="media-control screen-share-btn" *ngIf="role === 'stage'" (click)="handleToggleScreenShareClick()"
+      [class.active]="isScreenSharing" [disabled]="screenSharingParticipant && !isScreenSharing"
+      [title]="(screenSharingParticipant && !isScreenSharing) ? 'A screen share is already active' : (isScreenSharing ? 'Stop sharing screen' : 'Share screen')">
+      <svg *ngIf="!isScreenSharing" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+        <line x1="8" y1="21" x2="16" y2="21"></line>
+        <line x1="12" y1="17" x2="12" y2="21"></line>
+      </svg>
+      <svg *ngIf="isScreenSharing" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
+        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 2v6h-6"></path>
+        <path d="M3 12a9 9 0 0 1 15-6.7L21 8"></path>
+        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+        <line x1="8" y1="21" x2="16" y2="21"></line>
+        <line x1="12" y1="17" x2="12" y2="21"></line>
+      </svg>
+    </button>
+    <button class="media-control virtual-bg-btn" (click)="handleToggleVirtualBgClick()" title="Virtual Background">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+        stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path
+          d="M12 1v6M12 17v6M4.22 4.22l4.24 4.25M15.54 15.54l4.24 4.25M1 12h6M17 12h6M4.22 19.78l4.24-4.25M15.54 8.46l4.24-4.25">
+        </path>
+      </svg>
+    </button>
+    <button class="media-control leave-call-btn" title="Leave call" (click)="handleLeaveCallClick()">
+      <img src="../../assets/leave_call.svg" alt="Leave call" />
+    </button>
+  </div>
+</div>

@@ -1,0 +1,281 @@
+<h2 *ngIf="!error && !joined" class="connecting-message">
+  Connecting to call...
+</h2>
+<error-message *ngIf="error" [error]="error" (reset)="leaveCall()"></error-message>
+<p *ngIf="!isPublic && joined" class="lobby-message">
+  This room is private and you are now in the lobby. Please use a public room link to join a call.
+</p>
+
+<!-- Virtual Background Menu -->
+<div *ngIf="showVirtualBgMenu" class="virtual-bg-overlay" (click)="toggleVirtualBgMenu()">
+  <div class="virtual-bg-menu" (click)="$event.stopPropagation()">
+    <div class="virtual-bg-header">
+      <h3>Virtual Background</h3>
+      <button class="close-btn" (click)="toggleVirtualBgMenu()">×</button>
+    </div>
+    <div *ngIf="isLoadingVirtualBg" class="loading-overlay">
+      <div class="spinner"></div>
+      <p>Applying background...</p>
+    </div>
+    <div class="virtual-bg-options" [class.loading]="isLoadingVirtualBg">
+      <div *ngFor="let option of virtualBackgroundOptions" class="virtual-bg-option"
+        [class.active]="(option.type === 'none' && currentVirtualBg === 'none') || (option.type === 'blur' && currentVirtualBg === 'blur') || (option.type === 'image' && currentVirtualBg === 'image' && option.value === currentVirtualBgValue)"
+        (click)="applyVirtualBackground(option)">
+        <div class="option-preview">
+          <img *ngIf="option.thumbnail" [src]="option.thumbnail" [alt]="option.label">
+          <div *ngIf="option.type === 'blur'" class="blur-preview">
+            <div class="blur-circle"></div>
+          </div>
+          <div *ngIf="option.type === 'none'" class="none-preview">
+            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </div>
+        </div>
+        <span class="option-label">{{ option.label }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Layout Menu -->
+<div *ngIf="showLayoutMenu" class="layout-overlay" (click)="toggleLayoutMenu()">
+  <div class="layout-menu" (click)="$event.stopPropagation()">
+    <div class="layout-header">
+      <h3>Stage Layout</h3>
+      <button class="close-btn" (click)="toggleLayoutMenu()">×</button>
+    </div>
+    <div class="layout-options">
+      <div class="layout-option" [class.active]="currentLayout === 'grid'" 
+        [class.disabled]="screenSharingParticipant" 
+        (click)="screenSharingParticipant ? null : changeLayout('grid')">
+        <div class="layout-preview">
+          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="1.5">
+            <rect x="3" y="3" width="7" height="7" rx="1"></rect>
+            <rect x="14" y="3" width="7" height="7" rx="1"></rect>
+            <rect x="3" y="14" width="7" height="7" rx="1"></rect>
+            <rect x="14" y="14" width="7" height="7" rx="1"></rect>
+          </svg>
+        </div>
+        <span class="layout-label">Grid</span>
+      </div>
+
+      <div class="layout-option" [class.active]="currentLayout === 'screenshare-horizontal'"
+        [class.disabled]="!screenSharingParticipant"
+        (click)="!screenSharingParticipant ? null : changeLayout('screenshare-horizontal')">
+        <div class="layout-preview">
+          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="1.5">
+            <rect x="2" y="3" width="20" height="12" rx="1"></rect>
+            <rect x="2" y="17" width="6" height="4" rx="0.5"></rect>
+            <rect x="9" y="17" width="6" height="4" rx="0.5"></rect>
+            <rect x="16" y="17" width="6" height="4" rx="0.5"></rect>
+          </svg>
+        </div>
+        <span class="layout-label">Horizontal Bar</span>
+      </div>
+
+      <div class="layout-option" [class.active]="currentLayout === 'screenshare-vertical'"
+        [class.disabled]="!screenSharingParticipant"
+        (click)="!screenSharingParticipant ? null : changeLayout('screenshare-vertical')">
+        <div class="layout-preview">
+          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="1.5">
+            <rect x="2" y="2" width="15" height="20" rx="1"></rect>
+            <rect x="18" y="2" width="4" height="6" rx="0.5"></rect>
+            <rect x="18" y="9" width="4" height="6" rx="0.5"></rect>
+            <rect x="18" y="16" width="4" height="6" rx="0.5"></rect>
+          </svg>
+        </div>
+        <span class="layout-label">Vertical Bar</span>
+      </div>
+
+      <div class="layout-option" [class.active]="currentLayout === 'screenshare-full'"
+        [class.disabled]="!screenSharingParticipant"
+        (click)="!screenSharingParticipant ? null : changeLayout('screenshare-full')">
+        <div class="layout-preview">
+          <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="1.5">
+            <rect x="2" y="2" width="20" height="20" rx="1"></rect>
+          </svg>
+        </div>
+        <span class="layout-label">Full Screen</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div *ngIf="!error && joined" class="call-layout">
+
+  <div class="stage-container">
+    <div class="container-header stage-header">
+      <h3>
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M5 2H19" />
+          <path d="M12 2V22" />
+          <path
+            d="M12 22C10.8954 22 10 21.1046 10 20C10 18.8954 10.8954 18 12 18C13.1046 18 14 18.8954 14 20C14 21.1046 13.1046 22 12 22Z" />
+          <path d="M8 6H16" />
+          <path d="M8 10H16" />
+          <path d="M10 14H14" />
+        </svg>
+        Stage
+      </h3>
+      <div class="header-actions">
+        <button class="layout-toggle-btn" (click)="toggleLayoutMenu()" title="Change Layout">
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+            stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+          </svg>
+        </button>
+        <span class="participant-count">{{ getStageParticipants().length }}</span>
+      </div>
+    </div>
+
+    <div class="stage-content" [class.layout-grid]="currentLayout === 'grid'"
+      [class.layout-screenshare-horizontal]="currentLayout === 'screenshare-horizontal' && screenSharingParticipant"
+      [class.layout-screenshare-vertical]="currentLayout === 'screenshare-vertical' && screenSharingParticipant"
+      [class.layout-screenshare-full]="currentLayout === 'screenshare-full' && screenSharingParticipant">
+
+      <!-- Grid Layout (default or when no screenshare) -->
+      <div *ngIf="currentLayout === 'grid' || !screenSharingParticipant" class="stage-grid"
+        [attr.data-count]="getStageParticipants().length">
+        <video-tile *ngFor="let participant of getStageParticipants()" [screenShareView]="false"
+          (leaveCallClick)="leaveCall()" (toggleVideoClick)="toggleLocalVideo()" (toggleAudioClick)="toggleLocalAudio()"
+          (toggleScreenShareClick)="toggleScreenShare()" (toggleVirtualBgClick)="toggleVirtualBgMenu()"
+          [joined]="joined" [videoReady]="participant.videoReady" [audioReady]="participant.audioReady"
+          [screenVideoReady]="participant.screenVideoReady" [screenAudioReady]="participant.screenAudioReady"
+          [userName]="participant.userName" [local]="participant.local" [videoTrack]="participant.videoTrack"
+          [audioTrack]="participant.audioTrack" [screenVideoTrack]="participant.screenVideoTrack"
+          [screenAudioTrack]="participant.screenAudioTrack" [isScreenSharing]="isScreenSharing"
+          [role]="participant.role" (roleChangeClick)="toggleParticipantRole(participant)"
+          [screenSharingParticipant]="screenSharingParticipant"></video-tile>
+
+        <div *ngIf="getStageParticipants().length === 0" class="empty-state">
+          Stage is empty
+        </div>
+      </div>
+
+      <!-- Screenshare with Horizontal Bar -->
+      <div *ngIf="currentLayout === 'screenshare-horizontal' && screenSharingParticipant"
+        class="stage-screenshare-horizontal">
+        <div class="screenshare-main-horizontal">
+          <video-tile [screenShareView]="true" (leaveCallClick)="leaveCall()" (toggleVideoClick)="toggleLocalVideo()"
+            (toggleAudioClick)="toggleLocalAudio()" (toggleScreenShareClick)="toggleScreenShare()" [joined]="joined"
+            [videoReady]="screenSharingParticipant.videoReady" [audioReady]="screenSharingParticipant.audioReady"
+            [screenVideoReady]="screenSharingParticipant.screenVideoReady"
+            [screenAudioReady]="screenSharingParticipant.screenAudioReady"
+            [userName]="screenSharingParticipant.userName" [local]="screenSharingParticipant.local"
+            [videoTrack]="screenSharingParticipant.videoTrack" [audioTrack]="screenSharingParticipant.audioTrack"
+            [screenVideoTrack]="screenSharingParticipant.screenVideoTrack"
+            [screenAudioTrack]="screenSharingParticipant.screenAudioTrack" [isScreenSharing]="isScreenSharing"
+            [role]="screenSharingParticipant.role" (roleChangeClick)="toggleParticipantRole(screenSharingParticipant)"
+            [screenSharingParticipant]="screenSharingParticipant">
+          </video-tile>
+        </div>
+        <div class="screenshare-horizontal-bar">
+          <video-tile *ngFor="let participant of getSidebarParticipants()" [sidebarView]="true"
+            [screenShareView]="false" (leaveCallClick)="leaveCall()" (toggleVideoClick)="toggleLocalVideo()"
+            (toggleAudioClick)="toggleLocalAudio()" (toggleScreenShareClick)="toggleScreenShare()"
+            (toggleVirtualBgClick)="toggleVirtualBgMenu()" [joined]="joined" [videoReady]="participant.videoReady"
+            [audioReady]="participant.audioReady" [screenVideoReady]="false" [screenAudioReady]="false"
+            [userName]="participant.userName" [local]="participant.local" [videoTrack]="participant.videoTrack"
+            [audioTrack]="participant.audioTrack" [screenVideoTrack]="undefined" [screenAudioTrack]="undefined"
+            [isScreenSharing]="isScreenSharing" [role]="participant.role"
+            (roleChangeClick)="toggleParticipantRole(participant)"
+            [screenSharingParticipant]="screenSharingParticipant"></video-tile>
+        </div>
+      </div>
+
+      <!-- Screenshare with Vertical Bar -->
+      <div *ngIf="currentLayout === 'screenshare-vertical' && screenSharingParticipant"
+        class="stage-screenshare-vertical">
+        <div class="screenshare-main-vertical">
+          <video-tile [screenShareView]="true" (leaveCallClick)="leaveCall()" (toggleVideoClick)="toggleLocalVideo()"
+            (toggleAudioClick)="toggleLocalAudio()" (toggleScreenShareClick)="toggleScreenShare()" [joined]="joined"
+            [videoReady]="screenSharingParticipant.videoReady" [audioReady]="screenSharingParticipant.audioReady"
+            [screenVideoReady]="screenSharingParticipant.screenVideoReady"
+            [screenAudioReady]="screenSharingParticipant.screenAudioReady"
+            [userName]="screenSharingParticipant.userName" [local]="screenSharingParticipant.local"
+            [videoTrack]="screenSharingParticipant.videoTrack" [audioTrack]="screenSharingParticipant.audioTrack"
+            [screenVideoTrack]="screenSharingParticipant.screenVideoTrack"
+            [screenAudioTrack]="screenSharingParticipant.screenAudioTrack" [isScreenSharing]="isScreenSharing"
+            [role]="screenSharingParticipant.role" (roleChangeClick)="toggleParticipantRole(screenSharingParticipant)"
+            [screenSharingParticipant]="screenSharingParticipant">
+          </video-tile>
+        </div>
+        <div class="screenshare-vertical-bar">
+          <video-tile *ngFor="let participant of getSidebarParticipants()" [sidebarView]="true"
+            [screenShareView]="false" (leaveCallClick)="leaveCall()" (toggleVideoClick)="toggleLocalVideo()"
+            (toggleAudioClick)="toggleLocalAudio()" (toggleScreenShareClick)="toggleScreenShare()"
+            (toggleVirtualBgClick)="toggleVirtualBgMenu()" [joined]="joined" [videoReady]="participant.videoReady"
+            [audioReady]="participant.audioReady" [screenVideoReady]="false" [screenAudioReady]="false"
+            [userName]="participant.userName" [local]="participant.local" [videoTrack]="participant.videoTrack"
+            [audioTrack]="participant.audioTrack" [screenVideoTrack]="undefined" [screenAudioTrack]="undefined"
+            [isScreenSharing]="isScreenSharing" [role]="participant.role"
+            (roleChangeClick)="toggleParticipantRole(participant)"
+            [screenSharingParticipant]="screenSharingParticipant"></video-tile>
+        </div>
+      </div>
+
+      <!-- Full Screenshare -->
+      <div *ngIf="currentLayout === 'screenshare-full' && screenSharingParticipant" class="stage-screenshare-full">
+        <video-tile [screenShareView]="true" (leaveCallClick)="leaveCall()" (toggleVideoClick)="toggleLocalVideo()"
+          (toggleAudioClick)="toggleLocalAudio()" (toggleScreenShareClick)="toggleScreenShare()" [joined]="joined"
+          [videoReady]="screenSharingParticipant.videoReady" [audioReady]="screenSharingParticipant.audioReady"
+          [screenVideoReady]="screenSharingParticipant.screenVideoReady"
+          [screenAudioReady]="screenSharingParticipant.screenAudioReady" [userName]="screenSharingParticipant.userName"
+          [local]="screenSharingParticipant.local" [videoTrack]="screenSharingParticipant.videoTrack"
+          [audioTrack]="screenSharingParticipant.audioTrack"
+          [screenVideoTrack]="screenSharingParticipant.screenVideoTrack"
+          [screenAudioTrack]="screenSharingParticipant.screenAudioTrack" [isScreenSharing]="isScreenSharing"
+          [role]="screenSharingParticipant.role" (roleChangeClick)="toggleParticipantRole(screenSharingParticipant)"
+          [screenSharingParticipant]="screenSharingParticipant">
+        </video-tile>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="backstage-container">
+    <div class="container-header backstage-header">
+      <h3>
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M15 10l-4 4-4-4" />
+          <path d="M2.73 15a13 13 0 0 0 18.54 0M2.73 9a13 13 0 0 1 18.54 0M12 3v2" />
+          <path d="M12 19v2" />
+        </svg>
+        Backstage
+      </h3>
+      <span class="participant-count">{{ getBackstageParticipants().length }}</span>
+    </div>
+    <div class="backstage-content">
+      <div class="backstage-scroll">
+        <video-tile *ngFor="let participant of getBackstageParticipants()" [sidebarView]="true"
+          [screenShareView]="false" (leaveCallClick)="leaveCall()" (toggleVideoClick)="toggleLocalVideo()"
+          (toggleAudioClick)="toggleLocalAudio()" (toggleScreenShareClick)="toggleScreenShare()"
+          (toggleVirtualBgClick)="toggleVirtualBgMenu()" [joined]="joined" [videoReady]="participant.videoReady"
+          [audioReady]="participant.audioReady" [screenVideoReady]="participant.screenVideoReady"
+          [screenAudioReady]="participant.screenAudioReady" [userName]="participant.userName"
+          [local]="participant.local" [videoTrack]="participant.videoTrack" [audioTrack]="participant.audioTrack"
+          [screenVideoTrack]="participant.screenVideoTrack" [screenAudioTrack]="participant.screenAudioTrack"
+          [isScreenSharing]="isScreenSharing" [role]="participant.role"
+          (roleChangeClick)="toggleParticipantRole(participant)"
+          [screenSharingParticipant]="screenSharingParticipant"></video-tile>
+
+        <div *ngIf="getBackstageParticipants().length === 0" class="empty-state">
+          Backstage is empty
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>

@@ -1,0 +1,35 @@
+:host {
+  display: block;
+  /* Important for height calculations */
+  width: 100%;
+  max-width: 1600px;
+  /* Wider max-width */
+  margin: 0 auto;
+  padding: 16px;
+  /* Add padding here */
+  box-sizing: border-box;
+  /* Calculate min-height based on viewport and fixed header height */
+  /* Assuming header height is 60px (defined in app.component.css) */
+  height: 100vh;
+  display: flex;
+  /* Use flex to make child fill height */
+  flex-direction: column;
+}
+
+/* Make app-call component grow to fill the container */
+app-call {
+  flex-grow: 1;
+  display: flex;
+  /* Allow call-layout within app-call to take height */
+  flex-direction: column;
+}
+
+/* Adjust min-height on smaller screens if header height changes */
+@media (max-width: 768px) {
+  :host {
+    padding: 12px;
+    /* Less padding on mobile */
+    /* Assuming header height is 50px on mobile */
+    min-height: calc(100vh - 50px);
+  }
+}

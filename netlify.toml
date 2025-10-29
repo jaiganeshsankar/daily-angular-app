@@ -1,0 +1,12 @@
+[build]
+  command = "ng build --configuration production"
+  publish = "dist/daily-angular"
+  # Optional: Specify Node.js version if needed (check Netlify defaults)
+  # [build.environment]
+  #   NODE_VERSION = "18" # Or your required version
+
+# Optional: Redirects/Rewrites for Angular Router (SPA)
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

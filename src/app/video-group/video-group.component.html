@@ -1,0 +1,254 @@
+<ng-container>
+    <div *ngIf="!error && !joined">
+        <h2 class="connecting-message">
+            Connecting to call...
+        </h2>
+    </div>
+    <div *ngIf="error">
+        <error-message [error]="error" (reset)="leaveCall()"></error-message>
+    </div>
+    <!-- Virtual Background Menu -->
+    <div *ngIf="showVirtualBgMenu && joined" class="virtual-bg-overlay" (click)="toggleVirtualBgMenu()">
+        <div class="virtual-bg-menu" (click)="$event.stopPropagation()">
+            <div class="virtual-bg-header">
+                <h3>Virtual Background</h3>
+                <button class="close-btn" (click)="toggleVirtualBgMenu()">×</button>
+            </div>
+            <div *ngIf="isLoadingVirtualBg" class="loading-overlay">
+                <div class="spinner"></div>
+                <p>Applying background...</p>
+            </div>
+            <div class="virtual-bg-options" [class.loading]="isLoadingVirtualBg">
+                <div *ngFor="let option of virtualBackgroundOptions" class="virtual-bg-option"
+                    [class.active]="(option.type === 'none' && currentVirtualBg === 'none') || (option.type === 'blur' && currentVirtualBg === 'blur') || (option.type === 'image' && currentVirtualBg === 'image' && option.value === currentVirtualBgValue)"
+                    (click)="applyVirtualBackground(option)">
+                    <div class="option-preview">
+                        <img *ngIf="option.thumbnail" [src]="option.thumbnail" [alt]="option.label">
+                        <div *ngIf="option.type === 'blur'" class="blur-preview">
+                            <div class="blur-circle"></div>
+                        </div>
+                        <div *ngIf="option.type === 'none'" class="none-preview">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"
+                                fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </div>
+                    </div>
+                    <span class="option-label">{{ option.label }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="flex items-center p-4 min-w-screen bg-white  text-black">
+        <div *ngIf="joined" class="flex-col inline-flex justify-start items-start gap-3">
+            <div (click)="isLayoutDisabled(val) ? null : changeLayout(val)" *ngFor="let val of layouts"
+                class="layout-container border-2 flex items-center justify-center p-4 rounded overflow-hidden cursor-pointer"
+                [ngClass]="{
+            'selected': val === selectedLayout,
+            'opacity-50 cursor-not-allowed': isLayoutDisabled(val)}">
+                <div class="flex justify-center items-center">
+                    <div class="h-full max-w-11 max-h-8 inline-flex flex-col justify-start items-start overflow-hidden">
+                        <div class="w-11 h-8 flex flex-col justify-center items-center overflow-hidden">
+                            <div class="">
+                                <img class="w-auto h-full"
+                                    [src]="'https://ts-conference.imgix.net/common/illustrations/stage_vg_layout_' + val + '.svg'"
+                                    alt="VG layout illustration" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="inline-block rounded overflow-auto" [style.height]="'500px'" [style.width]="'1280px'">
+            <div *ngIf="joined" class="mainstage-container h-full w-full" #mainstageContainer>
+                <div *ngIf="getStageParticipants().length === 0"
+                    class="carousel bg-gray-100 banner-image-container h-full w-full flex items-center justify-center">
+                    <div class="flex flex-col justify-center items-center">
+                        <img class="" src="../../assets/blackicon.svg">
+                        <p class="font-bold mt-5 text-3xl text-black tracking-wider">
+                            The stage is empty</p>
+                    </div>
+                </div>
+
+                <div class="layout-wrapper h-full w-full" [attr.data-layout]="selectedLayout"
+                    [attr.data-peer-count]="getStageParticipants().length">
+
+                    <!-- ========== TILED LAYOUT ========== -->
+                    <ng-container *ngIf="selectedLayout === VideoLayout.TILED">
+                        <div class="tiled-container h-full w-full" role="grid">
+                            <div class="tiled-grid" [attr.aria-rowcount]="0" [attr.aria-colcount]="0">
+                                <ng-container>
+                                    <div class="tiled-item"
+                                        *ngFor="let participant of getStageParticipants(); trackBy: trackByPeerId; let i = index"
+                                        [attr.data-peer-id]="participant.id" role="gridcell"
+                                        [attr.aria-rowindex]="getRowIndex(i)"
+                                        [attr.aria-colindex]="(i % getCols()) + 1">
+                                        <app-hv-mainstage-speaker (leaveCallClick)="leaveCall()"
+                                            (toggleVideoClick)="toggleLocalVideo()"
+                                            (toggleAudioClick)="toggleLocalAudio()"
+                                            (toggleScreenShareClick)="toggleScreenShare()"
+                                            (toggleVirtualBgClick)="toggleVirtualBgMenu()" [joined]="joined"
+                                            [videoReady]="participant.videoReady" [audioReady]="participant.audioReady"
+                                            [userName]="participant.userName" [local]="participant.local"
+                                            [videoTrack]="participant.videoTrack" [audioTrack]="participant.audioTrack"
+                                            [role]="participant.role" [isScreenSharing]="isScreenSharing"
+                                            (roleChangeClick)="toggleParticipantRole(participant)"></app-hv-mainstage-speaker>
+                                    </div>
+                                </ng-container>
+                            </div>
+                        </div>
+                    </ng-container>
+
+                    <!-- ========== PINNED VERTICAL LAYOUT  ========== -->
+                    <ng-container *ngIf="selectedLayout === VideoLayout.PINNED_VERTICAL">
+                        <div class="pinned-vertical-layout h-full w-full" role="region"
+                            aria-label="Vertical pinned layout">
+
+                            <!-- Main area for screen share or primary content -->
+                            <div class="main-area" role="main">
+                                <div *ngIf="isScreenSharing && screenSharingParticipant"
+                                    class="screen-share-container h-full w-full">
+                                    <app-hv-mainstage-screen-share [screenShareView]="isScreenSharing"
+                                        [screenVideoReady]="screenSharingParticipant.screenVideoReady"
+                                        [screenAudioReady]="screenSharingParticipant.screenAudioReady"
+                                        [userName]="screenSharingParticipant.userName"
+                                        [local]="screenSharingParticipant.local"
+                                        [screenVideoTrack]="screenSharingParticipant.screenVideoTrack"
+                                        [screenAudioTrack]="screenSharingParticipant.screenAudioTrack"
+                                        [role]="screenSharingParticipant.role"
+                                        [screenSharingParticipant]="screenSharingParticipant">
+                                    </app-hv-mainstage-screen-share>
+                                </div>
+                            </div>
+
+                            <!-- vertical bottom bar for all users -->
+                            <div class="flex items-center pinned-vertical-bottom" role="complementary"
+                                [attr.aria-label]="'Participant bar with ' + getStageParticipants().length + ' participants'">
+                                <div class="bottom-content" role="list">
+                                    <div
+                                        class="bottom-inner flex hide-scroll items-center max-h-full overflow-x-auto overflow-y-hidden scroll w-full">
+                                        <div class="bottom-item"
+                                            *ngFor="let participant of getStageParticipants(); trackBy: trackByPeerId; let i = index"
+                                            role="listitem" [attr.data-peer-id]="participant.id">
+                                            <app-hv-mainstage-speaker (leaveCallClick)="leaveCall()"
+                                                (toggleVideoClick)="toggleLocalVideo()"
+                                                (toggleAudioClick)="toggleLocalAudio()"
+                                                (toggleScreenShareClick)="toggleScreenShare()"
+                                                (toggleVirtualBgClick)="toggleVirtualBgMenu()" [joined]="joined"
+                                                [videoReady]="participant.videoReady"
+                                                [audioReady]="participant.audioReady" [userName]="participant.userName"
+                                                [local]="participant.local" [videoTrack]="participant.videoTrack"
+                                                [audioTrack]="participant.audioTrack" [role]="participant.role"
+                                                [isScreenSharing]="isScreenSharing"
+                                                (roleChangeClick)="toggleParticipantRole(participant)"></app-hv-mainstage-speaker>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </ng-container>
+
+                    <!-- ========== PINNED HORIZONTAL LAYOUT  ========== -->
+                    <ng-container *ngIf="selectedLayout === VideoLayout.PINNED_HORIZONTAL">
+                        <div class="pinned-horizontal-layout h-full w-full" role="region"
+                            aria-label="Horizontal pinned layout">
+
+                            <!-- Main area for screen share or primary content -->
+                            <div class="main-area" role="main">
+                                <div *ngIf="isScreenSharing && screenSharingParticipant"
+                                    class="screen-share-container h-full w-full">
+                                    <app-hv-mainstage-screen-share [screenShareView]="isScreenSharing"
+                                        [screenVideoReady]="screenSharingParticipant.screenVideoReady"
+                                        [screenAudioReady]="screenSharingParticipant.screenAudioReady"
+                                        [userName]="screenSharingParticipant.userName"
+                                        [local]="screenSharingParticipant.local"
+                                        [screenVideoTrack]="screenSharingParticipant.screenVideoTrack"
+                                        [screenAudioTrack]="screenSharingParticipant.screenAudioTrack"
+                                        [role]="screenSharingParticipant.role"
+                                        [screenSharingParticipant]="screenSharingParticipant">
+                                    </app-hv-mainstage-screen-share>
+                                </div>
+                            </div>
+
+                            <!-- horizontal sidebar for all users -->
+                            <div class="pinned-horizontal-sidebar" role="complementary"
+                                [attr.aria-label]="'Participant sidebar with ' + getStageParticipants().length + ' participants'">
+                                <div class="sidebar-content" role="list">
+                                    <div class="sidebar-inner">
+                                        <div class="sidebar-item"
+                                            *ngFor="let participant of getStageParticipants(); trackBy: trackByPeerId; let i = index"
+                                            role="listitem" [attr.data-peer-id]="participant.id">
+                                            <app-hv-mainstage-speaker (leaveCallClick)="leaveCall()"
+                                                (toggleVideoClick)="toggleLocalVideo()"
+                                                (toggleAudioClick)="toggleLocalAudio()"
+                                                (toggleScreenShareClick)="toggleScreenShare()"
+                                                [isScreenSharing]="isScreenSharing"
+                                                (toggleVirtualBgClick)="toggleVirtualBgMenu()" [joined]="joined"
+                                                [videoReady]="participant.videoReady"
+                                                [audioReady]="participant.audioReady" [userName]="participant.userName"
+                                                [local]="participant.local" [videoTrack]="participant.videoTrack"
+                                                [audioTrack]="participant.audioTrack" [role]="participant.role"
+                                                (roleChangeClick)="toggleParticipantRole(participant)"></app-hv-mainstage-speaker>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </ng-container>
+
+                    <!-- ========== FULL SCREEN (Screen Share) ========== -->
+                    <ng-container *ngIf="selectedLayout === VideoLayout.FULL_SCREEN">
+                        <div class="fullscreen-layout h-full w-full" role="main">
+                            <div *ngIf="isScreenSharing && screenSharingParticipant" class="h-full w-full">
+                                <app-hv-mainstage-screen-share [screenShareView]="isScreenSharing"
+                                    [screenVideoReady]="screenSharingParticipant.screenVideoReady"
+                                    [screenAudioReady]="screenSharingParticipant.screenAudioReady"
+                                    [userName]="screenSharingParticipant.userName"
+                                    [local]="screenSharingParticipant.local"
+                                    [screenVideoTrack]="screenSharingParticipant.screenVideoTrack"
+                                    [screenAudioTrack]="screenSharingParticipant.screenAudioTrack"
+                                    [role]="screenSharingParticipant.role"
+                                    [screenSharingParticipant]="screenSharingParticipant">
+                                </app-hv-mainstage-screen-share>
+                            </div>
+                        </div>
+                        <ng-container
+                            *ngFor="let participant of getStageParticipants(); trackBy: trackByPeerId; let i = index">
+                            <app-audio-track [joined]="joined" [audioReady]="participant.audioReady"
+                                [local]="participant.local" [audioTrack]="participant.audioTrack"
+                                [role]="participant.role"></app-audio-track>
+                        </ng-container>
+                    </ng-container>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div *ngIf="joined" class="backstage-container min-w-screen bg-white">
+        <div class="container-header backstage-header">
+            <h3>
+                Backstage
+            </h3>
+        </div>
+        <div class="backstage-content" [style.height]="'180px'">
+            <div class="backstage-scroll">
+                <video-tile *ngFor="let participant of getBackstageParticipants()" [sidebarView]="true"
+                    [screenShareView]="false" (leaveCallClick)="leaveCall()" (toggleVideoClick)="toggleLocalVideo()"
+                    (toggleAudioClick)="toggleLocalAudio()" (toggleScreenShareClick)="toggleScreenShare()"
+                    (toggleVirtualBgClick)="toggleVirtualBgMenu()" [joined]="joined"
+                    [videoReady]="participant.videoReady" [audioReady]="participant.audioReady"
+                    [screenVideoReady]="participant.screenVideoReady" [screenAudioReady]="participant.screenAudioReady"
+                    [userName]="participant.userName" [local]="participant.local" [videoTrack]="participant.videoTrack"
+                    [audioTrack]="participant.audioTrack" [screenVideoTrack]="participant.screenVideoTrack"
+                    [screenAudioTrack]="participant.screenAudioTrack" [isScreenSharing]="isScreenSharing"
+                    [role]="participant.role" (roleChangeClick)="toggleParticipantRole(participant)"
+                    [screenSharingParticipant]="screenSharingParticipant"></video-tile>
+
+                <div *ngIf="getBackstageParticipants().length === 0" class="empty-state items-center">
+                    Backstage is empty
+                </div>
+            </div>
+        </div>
+    </div>
+
+</ng-container>

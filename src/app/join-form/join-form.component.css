@@ -1,0 +1,152 @@
+:host {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-grow: 1;
+  /* Make host fill space in daily-container */
+  padding: 20px;
+}
+
+.join-container {
+  background-color: #ffffff;
+  padding: 30px 40px;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e0e0e0;
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+}
+
+h2 {
+  margin-top: 0;
+  margin-bottom: 24px;
+  color: #343a40;
+  font-weight: 600;
+  font-size: 1.5rem;
+}
+
+.join-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  /* Space between form groups */
+}
+
+.form-group {
+  text-align: left;
+  position: relative;
+  /* For validation message positioning */
+  padding-bottom: 18px;
+  /* Space for validation message */
+}
+
+.form-group label {
+  display: block;
+  /* Label on its own line */
+  font-size: 0.85rem;
+  color: #495057;
+  /* Darker label */
+  font-weight: 500;
+  margin-bottom: 6px;
+}
+
+.form-group input[type="text"],
+.form-group input[type="url"] {
+  width: 100%;
+  /* Full width */
+  padding: 12px 14px;
+  /* More padding */
+  border: 1px solid #ced4da;
+  /* Standard border */
+  border-radius: 8px;
+  /* Standard radius */
+  font-size: 1rem;
+  box-sizing: border-box;
+  /* Include padding in width */
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.form-group input[type="text"]:focus,
+.form-group input[type="url"]:focus {
+  border-color: #8c9eff;
+  /* Theme color focus */
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+  /* Focus ring */
+  outline: none;
+}
+
+/* Styling for invalid inputs */
+.form-group input.ng-invalid.ng-touched,
+.form-group input.ng-invalid.ng-dirty {
+  border-color: #dc3545;
+  /* Red border for errors */
+}
+
+.form-group input.ng-invalid.ng-touched:focus,
+.form-group input.ng-invalid.ng-dirty:focus {
+  box-shadow: 0 0 0 3px rgba(220, 53, 69, 0.2);
+  /* Red focus ring */
+}
+
+
+.validation-error {
+  color: #dc3545;
+  /* Red error text */
+  font-size: 0.75rem;
+  /* Smaller text */
+  position: absolute;
+  /* Position below input */
+  bottom: 0;
+  left: 0;
+  margin-top: 4px;
+}
+
+.submit-btn {
+  padding: 12px 20px;
+  font-size: 1rem;
+  /* Larger font */
+  font-weight: 600;
+  /* Bolder */
+  border: none;
+  border-radius: 8px;
+  margin-top: 16px;
+  /* Space above button */
+  background-color: #667eea;
+  /* Theme color */
+  color: white;
+  cursor: pointer;
+  transition: background-color 0.2s, opacity 0.2s, transform 0.1s;
+}
+
+.submit-btn:hover:not(:disabled) {
+  background-color: #556bb4;
+  /* Darker theme color */
+}
+
+.submit-btn:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.submit-btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+  background-color: #adb5bd;
+  /* Grey when disabled */
+}
+
+/* Responsive Join Form */
+@media (max-width: 480px) {
+  .join-container {
+    padding: 24px;
+    box-shadow: none;
+    /* Remove shadow on small screens maybe? */
+    border: none;
+    background: none;
+  }
+
+  h2 {
+    font-size: 1.3rem;
+    margin-bottom: 20px;
+  }
+}

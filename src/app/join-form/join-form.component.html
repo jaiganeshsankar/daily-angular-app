@@ -1,0 +1,28 @@
+<div class="join-container">
+  <h2>Join Video Call</h2>
+  <form [formGroup]="joinForm" (ngSubmit)="onSubmit()" class="join-form">
+    <div class="form-group">
+      <label for="name">Your Name</label>
+      <input type="text" id="name" formControlName="name" placeholder="Enter your display name" required />
+      <div
+        *ngIf="joinForm.controls['name'].invalid && (joinForm.controls['name'].dirty || joinForm.controls['name'].touched)"
+        class="validation-error">
+        Name is required.
+      </div>
+    </div>
+    <!-- <div class="form-group">
+      <label for="url">Daily Room URL</label>
+      <input type="url" id="url" formControlName="url" placeholder="https://your-domain.daily.co/room-name" required
+        pattern="https://.+\.daily\.co/.+" />
+      <div
+        *ngIf="joinForm.controls['url'].invalid && (joinForm.controls['url'].dirty || joinForm.controls['url'].touched)"
+        class="validation-error">
+        <span *ngIf="joinForm.controls['url'].errors?.['required']">Room URL is required.</span>
+        <span *ngIf="joinForm.controls['url'].errors?.['pattern']">Please enter a valid Daily room URL.</span>
+      </div>
+    </div> -->
+    <button type="submit" class="submit-btn" [disabled]="!joinForm.valid">
+      {{ joinForm.valid ? 'Join Call' : 'Enter Name & URL' }}
+    </button>
+  </form>
+</div>

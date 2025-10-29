@@ -1,0 +1,10 @@
+<div class="h-full w-full relative overflow-hidden border-transparent">
+	<div class="video-container">
+		<!-- <video [id]="'screenshare'" [muted]="true" [autoplay]="true" playsinline></video> -->
+		<video [id]="'screenshare'" *ngIf="screenShareView && screenVideoTrack && screenVideoReady" autoPlay muted
+			playsInline class="video-element screen-share-video" [srcObject]="screenVideoStream"></video>
+		<audio *ngIf="screenAudioStream && !local" autoPlay playsInline [srcObject]="screenAudioStream">
+			<track kind="captions" />
+		</audio>
+	</div>
+</div>
