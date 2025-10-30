@@ -82,6 +82,10 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     private liveStreamSubscription: Subscription;
     private toggleStreamSubscription: Subscription;
 
+    // NEW: Audio control properties for backstage users
+    stagePlaybackVolume: number = 1;
+    isBackstageMuted: boolean = false;
+
     constructor(private liveStreamService: LiveStreamService) {}
 
     virtualBackgroundOptions: VirtualBackgroundOption[] = [
@@ -281,6 +285,18 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         this.participants[participant.session_id] = p;
         this.participantRoles[participant.session_id] = p.role;
         this.updateAudioSubscriptions();
+
+        // NEW: Apply volume controls to new remote participants
+        if (!p.local) {
+            // Delay volume application to allow audio elements to be created
+            setTimeout(() => {
+                if (p.role === 'stage') {
+                    this.setParticipantAudioVolume(p.id, this.stagePlaybackVolume);
+                } else if (p.role === 'backstage') {
+                    this.setParticipantAudioVolume(p.id, this.isBackstageMuted ? 0 : 1);
+                }
+            }, 100);
+        }
     }
 
     updateTrack(participant: DailyParticipant, newTrackType: string): void {
@@ -418,6 +434,17 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             }
         }
 
+        // NEW: Apply volume controls to updated remote participants
+        if (!participant.local) {
+            setTimeout(() => {
+                if (updatedP.role === 'stage') {
+                    this.setParticipantAudioVolume(participant.session_id, this.stagePlaybackVolume);
+                } else if (updatedP.role === 'backstage') {
+                    this.setParticipantAudioVolume(participant.session_id, this.isBackstageMuted ? 0 : 1);
+                }
+            }, 100);
+        }
+
         this.updateAudioSubscriptions();
         console.log('Recalculating layout due to participant update', this.getStageParticipants().length);
         if (this.getStageParticipants().length > 0) {
@@ -522,6 +549,106 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         } catch (error) {
             console.error("Error toggling screen share:", error);
             this.error = "Failed to toggle screen share. Please try again.";
+        }
+    }
+
+    // NEW: Audio control methods for backstage users
+    handleStageVolumeChange(event: any): void {
+        this.stagePlaybackVolume = parseFloat(event.target.value);
+        this.updateStageVolumes();
+    }
+
+    updateStageVolumes(): void {
+        Object.values(this.participants).forEach(participant => {
+            if (participant.role === 'stage' && !participant.local) {
+                this.setParticipantAudioVolume(participant.id, this.stagePlaybackVolume);
+            }
+        });
+    }
+
+    toggleMuteBackstage(): void {
+        this.isBackstageMuted = !this.isBackstageMuted;
+        console.log(`Toggling backstage mute to: ${this.isBackstageMuted}`);
+        this.updateBackstageVolumes();
+    }
+
+    updateBackstageVolumes(): void {
+        const newVolume = this.isBackstageMuted ? 0 : 1;
+        const backstageParticipants = Object.values(this.participants).filter(p => p.role === 'backstage' && !p.local);
+        
+        console.log(`Updating ${backstageParticipants.length} backstage participants to volume ${newVolume}`);
+        console.log('Backstage participants:', backstageParticipants.map(p => ({ id: p.id, userName: p.userName, role: p.role })));
+        
+        backstageParticipants.forEach(participant => {
+            this.setParticipantAudioVolume(participant.id, newVolume);
+        });
+    }
+
+    private setParticipantAudioVolume(participantId: string, volume: number): void {
+        try {
+            let audioElementsFound = 0;
+            const participant = this.participants[participantId];
+            
+            console.log(`Setting volume ${volume} for participant ${participantId} (${participant?.role})`);
+
+            // Method 1: Find audio elements by data-participant-id attribute
+            const audioElements = document.querySelectorAll(`audio[data-participant-id="${participantId}"]`);
+            audioElements.forEach((audioElement: any) => {
+                if (audioElement && typeof audioElement.volume !== 'undefined') {
+                    audioElement.volume = Math.max(0, Math.min(1, volume));
+                    audioElementsFound++;
+                    console.log(`Set volume via data-participant-id for ${participantId}`);
+                }
+            });
+
+            // Method 2: Find by participant session ID in various selectors
+            const participantElements = document.querySelectorAll(`[data-peer-id="${participantId}"]`);
+            participantElements.forEach(element => {
+                const audioEl = element.querySelector('audio');
+                if (audioEl && typeof audioEl.volume !== 'undefined') {
+                    audioEl.volume = Math.max(0, Math.min(1, volume));
+                    audioElementsFound++;
+                    console.log(`Set volume via data-peer-id for ${participantId}`);
+                }
+            });
+
+            // Method 3: Find all audio elements and check if they belong to this participant
+            const allAudioElements = document.querySelectorAll('audio');
+            allAudioElements.forEach((audioElement: any) => {
+                if (audioElement.srcObject && participant?.audioTrack) {
+                    const tracks = audioElement.srcObject.getTracks ? audioElement.srcObject.getTracks() : [];
+                    const hasParticipantTrack = tracks.some((track: any) => track.id === participant.audioTrack?.id);
+                    if (hasParticipantTrack) {
+                        audioElement.volume = Math.max(0, Math.min(1, volume));
+                        audioElementsFound++;
+                        console.log(`Set volume via audio track match for ${participantId}`);
+                    }
+                }
+            });
+
+            // Method 4: Try video-tile components that might have audio
+            const videoTileElements = document.querySelectorAll('video-tile');
+            videoTileElements.forEach(element => {
+                const audioEl = element.querySelector('audio');
+                const participantIdAttr = element.getAttribute('data-participant-id') || 
+                                        element.querySelector('[data-peer-id]')?.getAttribute('data-peer-id');
+                if (audioEl && participantIdAttr === participantId && typeof audioEl.volume !== 'undefined') {
+                    audioEl.volume = Math.max(0, Math.min(1, volume));
+                    audioElementsFound++;
+                    console.log(`Set volume via video-tile for ${participantId}`);
+                }
+            });
+
+            if (audioElementsFound === 0) {
+                console.warn(`No audio elements found for participant ${participantId} (${participant?.role})`);
+                // Log available elements for debugging
+                console.log('Available audio elements:', document.querySelectorAll('audio').length);
+                console.log('Available peer elements:', document.querySelectorAll('[data-peer-id]').length);
+            } else {
+                console.log(`Successfully set volume for ${audioElementsFound} audio elements for participant ${participantId}`);
+            }
+        } catch (error) {
+            console.error('Error setting audio volume for participant:', participantId, error);
         }
     }
 

@@ -60,7 +60,22 @@
                 </div>
             </div>
         </div>
-        <div class="inline-block rounded overflow-auto" [style.height]="'500px'" [style.width]="'1280px'">
+        <div class="inline-block rounded overflow-auto relative" [style.height]="'500px'" [style.width]="'1280px'">
+            <!-- NEW: Horizontal volume slider overlay for backstage users -->
+            <div *ngIf="joined && localParticipantRole === 'backstage'" class="absolute bottom-4 right-4 z-10 flex items-center p-3 bg-black bg-opacity-75 rounded-lg shadow-lg">
+                <label class="text-xs font-medium text-white mr-2">Stage Volume</label>
+                <input 
+                    type="range" 
+                    min="0" 
+                    max="1" 
+                    step="0.1" 
+                    [value]="stagePlaybackVolume" 
+                    (input)="handleStageVolumeChange($event)"
+                    class="w-24 h-2 bg-gray-400 rounded-lg cursor-pointer"
+                >
+                <span class="text-xs text-white ml-2">{{ (stagePlaybackVolume * 100) | number:'1.0-0' }}%</span>
+            </div>
+            
             <div *ngIf="joined" class="mainstage-container h-full w-full" #mainstageContainer>
                 <div *ngIf="getStageParticipants().length === 0"
                     class="carousel bg-gray-100 banner-image-container h-full w-full flex items-center justify-center">
@@ -225,10 +240,29 @@
         </div>
     </div>
     <div *ngIf="joined" class="backstage-container min-w-screen bg-white">
-        <div class="container-header backstage-header">
-            <h3>
-                Backstage
-            </h3>
+        <div class="container-header backstage-header flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <h3>Backstage</h3>
+                <!-- NEW: Volume icon for backstage mute/unmute -->
+                <button 
+                    *ngIf="joined && localParticipantRole === 'backstage'"
+                    (click)="toggleMuteBackstage()"
+                    class="p-1 rounded hover:bg-gray-100 transition-colors"
+                    [title]="isBackstageMuted ? 'Unmute Backstage' : 'Mute Backstage'"
+                >
+                    <!-- Volume Off Icon (when muted) -->
+                    <svg *ngIf="isBackstageMuted" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                        <line x1="23" y1="9" x2="17" y2="15"></line>
+                        <line x1="17" y1="9" x2="23" y2="15"></line>
+                    </svg>
+                    <!-- Volume On Icon (when unmuted) -->
+                    <svg *ngIf="!isBackstageMuted" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                        <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                    </svg>
+                </button>
+            </div>
         </div>
         <div class="backstage-content" [style.height]="'180px'">
             <div class="backstage-scroll">

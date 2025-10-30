@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Test MediaPipe Background Blur</title>
+  <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
+  <style>
+    body { font-family: sans-serif; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; padding: 20px; }
+    h2 { grid-column: 1 / -1; text-align: center; }
+    video, canvas { max-width: 100%; border: 1px solid black; }
+  </style>
+</head>
+<body>
+
+  <h2>Left: Raw Webcam | Right: Processed (Blurred)</h2>
+  
+  <video id="input-video" autoplay playsinline></video>
+  
+  <canvas id="output-canvas" width="640" height="360"></canvas>
+
+  <script type="module">
+    const videoElement = document.getElementById('input-video');
+    const canvasElement = document.getElementById('output-canvas');
+    const canvasCtx = canvasElement.getContext('2d');
+
+    // Initialize MediaPipe Selfie Segmentation
+    const selfieSegmentation = new SelfieSegmentation({
+      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`
+    });
+
+    selfieSegmentation.setOptions({
+      modelSelection: 1, // 0 for general, 1 for landscape (better for calls)
+      selfieMode: true
+    });
+
+    selfieSegmentation.onResults(onResults);
+
+    // Get the camera feed
+    navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 360 } })
+      .then((stream) => {
+        videoElement.srcObject = stream;
+        videoElement.play();
+        // Start processing once the video is playing
+        videoElement.onloadedmetadata = () => {
+          sendToMediaPipe();
+        };
+      })
+      .catch(err => {
+        console.error("Error getting user media:", err);
+        alert("Could not access webcam. Please ensure permissions are allowed.");
+      });
+
+    // Main processing loop
+    // Main processing loop
+    function sendToMediaPipe() {
+      // 1. Send the current video frame to MediaPipe
+      selfieSegmentation.send({ image: videoElement });
+
+      // 2. IMPORTANT: Tell the browser to call this *same function* again on the next animation frame
+      requestAnimationFrame(sendToMediaPipe); 
+    }
+
+    // This function is called when MediaPipe has a result
+    function onResults(results) {
+      canvasCtx.save();
+      canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+      // 1. Draw the original video frame (the person)
+      canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+      
+      // 2. Use 'destination-in' to keep only the part of the video that overlaps with the mask (isolates the person)
+      canvasCtx.globalCompositeOperation = 'destination-in';
+      canvasCtx.drawImage(results.segmentationMask, 0, 0, canvasElement.width, canvasElement.height);
+
+      // 3. Use 'destination-over' to draw *behind* the (now isolated) person
+      canvasCtx.globalCompositeOperation = 'destination-over';
+      
+      // 4. Fill the entire canvas with a solid background color
+      canvasCtx.fillStyle = '#006400'; // You can change this to any color (e.g., '#000000' for black)
+      canvasCtx.fillRect(0, 0, canvasElement.width, canvasElement.height);
+
+      // 5. Restore original settings
+      canvasCtx.restore();
+    }
+  </script>
+
+</body>
+</html>
