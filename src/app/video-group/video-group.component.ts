@@ -345,13 +345,26 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         }
     }
 
-    handleJoinedMeeting = (e: DailyEventObjectParticipants | undefined): void => {
+    handleJoinedMeeting = async (e: DailyEventObjectParticipants | undefined): Promise<void> => {
         if (!e || !this.callObject) return;
         console.log(e);
         this.joined = true;
 
         // Update joined state in service
         this.liveStreamService.setJoinedState(true);
+
+        // Pre-warm the virtual background processor to prevent CPU spike on first use
+        try {
+            console.log('Pre-warming virtual background processor...');
+            // This call initializes the ML model and processing pipeline
+            // without applying any visual effect.
+            await this.callObject.updateInputSettings({
+                video: { processor: { type: 'none' } }
+            });
+            console.log('Virtual background processor is ready.');
+        } catch (e) {
+            console.warn('Failed to pre-warm VB processor', e);
+        }
 
         const { access } = this.callObject.accessState();
         this.isPublic = access !== "unknown" && access.level === "full";
