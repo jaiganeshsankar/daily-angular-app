@@ -454,9 +454,27 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                         console.log('Stopping local screen share because local role changed to backstage.');
                         await this.callObject?.stopScreenShare();
                         this.updateScreenSharingParticipant();
+                        
+                        // Skip the live stream update below - it will be handled in updateScreenSharingParticipant()
+                        // with proper timing after screen sharing state is cleared
+                        return;
                     } catch (stopError) {
                         console.error('Error stopping local screen share on role change:', stopError);
                     }
+                }
+            }
+        } else {
+            // Handle remote participant role changes
+            // If a remote participant who was screen sharing gets moved to backstage
+            if (updatedP.role === 'backstage' && previousRole === 'stage') {
+                // Check if this participant was the current screen sharer
+                if (this.screenSharingParticipant && this.screenSharingParticipant.id === participant.session_id) {
+                    console.log(`Remote participant ${participant.session_id} who was screen sharing moved to backstage. Updating live stream.`);
+                    // We can't stop their screen share remotely, but we can immediately update our live stream layout
+                    this.updateScreenSharingParticipant();
+                    
+                    // Skip the live stream update below - it will be handled in updateScreenSharingParticipant()
+                    return;
                 }
             }
         }
@@ -1024,7 +1042,10 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         if (this.screenSharingParticipant === null) {
             applyScreenshareLayout = true;
         }
-        const sharingParticipant = Object.values(this.participants).find(p => p.screenVideoReady);
+        // Only consider stage participants for screen sharing in live stream
+        const sharingParticipant = Object.values(this.participants).find(p => 
+            p.screenVideoReady && p.role === 'stage'
+        );
         this.screenSharingParticipant = sharingParticipant || null;
         
         // Update screenshare audio volume when screen sharing starts/stops
