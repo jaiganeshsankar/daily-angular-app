@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, OnInit, OnDestroy } from "@angular/core";
+import { Component, EventEmitter, Input, Output, OnInit, OnDestroy, ChangeDetectionStrategy, ChangeDetectorRef } from "@angular/core";
 import { timer, Subscription } from 'rxjs';
 import DailyIframe, {
     DailyCall,
@@ -51,6 +51,7 @@ type Participants = {
     selector: "app-video-call",
     templateUrl: "./video-group.component.html",
     styleUrls: ["./video-group.component.scss"],
+    changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class VideoGroupComponent implements OnInit, OnDestroy {
     Object = Object;
@@ -89,7 +90,10 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     // Volume reapplication event listener
     private volumeReapplicationListener: (event: any) => void;
 
-    constructor(private liveStreamService: LiveStreamService) {}
+    constructor(
+        private liveStreamService: LiveStreamService,
+        private cdr: ChangeDetectorRef
+    ) {}
 
     virtualBackgroundOptions: VirtualBackgroundOption[] = [
         { type: 'none', label: 'None', thumbnail: '' },
@@ -141,9 +145,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         // Listen for volume reapplication requests from audio elements
         this.volumeReapplicationListener = (event: any) => {
             console.log('🔊 Volume reapplication requested by:', event.detail?.participantId);
-            setTimeout(() => {
-                this.reapplyAllVolumeSettings();
-            }, 50);
+            this.debouncedVolumeReapply();
         };
         document.addEventListener('requestVolumeReapplication', this.volumeReapplicationListener);
 
@@ -191,6 +193,14 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     }
 
     ngOnDestroy(): void {
+        // Clean up timeouts to prevent memory leaks and reduce CPU usage
+        if (this.layoutRecalcTimeout) {
+            clearTimeout(this.layoutRecalcTimeout);
+        }
+        if (this.volumeReapplyTimeout) {
+            clearTimeout(this.volumeReapplyTimeout);
+        }
+        
         // Unsubscribe from live stream service
         if (this.liveStreamSubscription) {
             this.liveStreamSubscription.unsubscribe();
@@ -518,9 +528,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
 
         // CRITICAL FIX: Reapply all volume settings after participant/track changes
         // This fixes the bug where volumes reset when srcObject changes
-        setTimeout(() => {
-            this.reapplyAllVolumeSettings();
-        }, 150);
+        this.debouncedVolumeReapply();
     };
 
     handleTrackStartedStopped = (e: DailyEventObjectTrack | undefined): void => {
@@ -537,9 +545,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         
         // CRITICAL FIX: Reapply volumes when tracks start/stop
         // This is especially important for screen audio tracks
-        setTimeout(() => {
-            this.reapplyAllVolumeSettings();
-        }, 150);
+        this.debouncedVolumeReapply();
     };
 
     handleParticipantLeft = (e: DailyEventObjectParticipantLeft | undefined): void => {
@@ -1057,9 +1063,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         
         // CRITICAL FIX: Reapply all volumes when screen sharing changes
         // This prevents the browser from resetting volumes during stream changes
-        setTimeout(() => {
-            this.reapplyAllVolumeSettings();
-        }, 200);
+        this.debouncedVolumeReapply();
         
         // Update live stream if currently streaming and screen sharing status changed
         if (this.isLive && previousScreenSharingParticipant !== this.screenSharingParticipant) {
@@ -1368,6 +1372,14 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     private static readonly DEFAULT_PADDING = 16;
     private static readonly DEFAULT_GAP = 8;
     private static readonly MIN_TILE_SIZE = 80;
+    
+    // Performance optimization: Debounce layout recalculations
+    private layoutRecalcTimeout?: number;
+    private readonly LAYOUT_RECALC_DEBOUNCE = 100; // ms
+    
+    // Performance optimization: Debounce volume reapplication
+    private volumeReapplyTimeout?: number;
+    private readonly VOLUME_REAPPLY_DEBOUNCE = 50; // ms
 
     private getContainerDimensions(element: HTMLElement): { width: number; height: number } | null {
         const rect = element.getBoundingClientRect();
@@ -1379,7 +1391,18 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         return element || null;
     }
 
+    // Debounced version to prevent excessive layout recalculations
     reCalculateLayoutData = (): void => {
+        if (this.layoutRecalcTimeout) {
+            clearTimeout(this.layoutRecalcTimeout);
+        }
+        
+        this.layoutRecalcTimeout = window.setTimeout(() => {
+            this.performLayoutCalculation();
+        }, this.LAYOUT_RECALC_DEBOUNCE);
+    };
+
+    private performLayoutCalculation(): void {
         if (this.selectedLayout === VideoLayout.TILED) {
             this.applyTiledLayout();
         } else if (this.selectedLayout === VideoLayout.PINNED_VERTICAL) {
@@ -1387,7 +1410,19 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         } else if (this.selectedLayout === VideoLayout.PINNED_HORIZONTAL) {
             this.applyPinnedVerticalLayout()
         }
-    };
+    }
+
+    // Debounced volume reapplication to prevent excessive calls
+    private debouncedVolumeReapply(): void {
+        if (this.volumeReapplyTimeout) {
+            clearTimeout(this.volumeReapplyTimeout);
+        }
+        
+        this.volumeReapplyTimeout = window.setTimeout(() => {
+            this.reapplyAllVolumeSettings();
+            this.cdr.detectChanges(); // Trigger change detection only when needed
+        }, this.VOLUME_REAPPLY_DEBOUNCE);
+    }
 
     private applyTiledLayout(): void {
         timer(100).subscribe(() => {
