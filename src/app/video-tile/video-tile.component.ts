@@ -165,4 +165,30 @@ export class VideoTileComponent {
   handleRoleChangeClick(): void {
     this.roleChangeClick.emit();
   }
+
+  onAudioLoadStart(event: Event): void {
+    // When audio element starts loading new content, request volume reapplication
+    console.log('Audio loadstart event for', this.userName, '- requesting volume reapplication');
+    setTimeout(() => {
+      this.requestVolumeReapplication();
+    }, 100);
+  }
+
+  onScreenAudioLoadStart(event: Event): void {
+    // When screen audio element starts loading new content, request volume reapplication
+    console.log('Screen audio loadstart event for', this.userName, '- requesting volume reapplication');
+    setTimeout(() => {
+      this.requestVolumeReapplication();
+    }, 100);
+  }
+
+  private requestVolumeReapplication(): void {
+    // Emit a custom event that the parent component can listen to
+    // This is a cleaner approach than directly calling parent methods
+    const event = new CustomEvent('requestVolumeReapplication', {
+      detail: { participantId: this.userName },
+      bubbles: true
+    });
+    document.dispatchEvent(event);
+  }
 }

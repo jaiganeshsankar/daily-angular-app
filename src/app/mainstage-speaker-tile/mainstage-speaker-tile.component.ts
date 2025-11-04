@@ -16,11 +16,13 @@ export class MainstageSpeakerTileComponent implements OnInit, OnDestroy, OnChang
 	@Input() userName: string;
 	@Input() videoTrack: MediaStreamTrack | undefined;
 	@Input() audioTrack: MediaStreamTrack | undefined;
+	@Input() screenAudioTrack: MediaStreamTrack | undefined;
 	@Input() role: 'backstage' | 'stage';
 	@Input() isScreenSharing: boolean;
 
 	videoStream: MediaStream | undefined;
 	audioStream: MediaStream | undefined;
+	screenAudioStream: MediaStream | undefined;
 
 	@Output() leaveCallClick: EventEmitter<null> = new EventEmitter();
 	@Output() toggleVideoClick: EventEmitter<null> = new EventEmitter();
@@ -36,6 +38,9 @@ export class MainstageSpeakerTileComponent implements OnInit, OnDestroy, OnChang
 		}
 		if (this.audioTrack) {
 			this.addAudioStream(this.audioTrack);
+		}
+		if (this.screenAudioTrack) {
+			this.addScreenAudioStream(this.screenAudioTrack);
 		}
 	}
 
@@ -62,6 +67,14 @@ export class MainstageSpeakerTileComponent implements OnInit, OnDestroy, OnChang
 		if (audioTrack?.currentValue && this.audioStream) {
 			this.updateAudioTrack(audioTrack.previousValue, audioTrack.currentValue);
 		}
+
+		// Handle screen audio track changes
+		if (screenAudioTrack?.currentValue && !this.screenAudioStream) {
+			this.addScreenAudioStream(screenAudioTrack.currentValue);
+		}
+		if (screenAudioTrack?.currentValue && this.screenAudioStream) {
+			this.updateScreenAudioTrack(screenAudioTrack.previousValue, screenAudioTrack.currentValue);
+		}
 	}
 
 	addVideoStream(track: MediaStreamTrack) {
@@ -86,6 +99,17 @@ export class MainstageSpeakerTileComponent implements OnInit, OnDestroy, OnChang
 		this.audioStream?.addTrack(track);
 	}
 
+	addScreenAudioStream(track: MediaStreamTrack) {
+		this.screenAudioStream = new MediaStream([track]);
+	}
+
+	updateScreenAudioTrack(oldTrack: MediaStreamTrack, track: MediaStreamTrack) {
+		if (oldTrack) {
+			this.screenAudioStream?.removeTrack(oldTrack);
+		}
+		this.screenAudioStream?.addTrack(track);
+	}
+
 	handleToggleVideoClick(): void {
 		this.toggleVideoClick.emit();
 	}
@@ -108,6 +132,31 @@ export class MainstageSpeakerTileComponent implements OnInit, OnDestroy, OnChang
 
 	handleRoleChangeClick(): void {
 		this.roleChangeClick.emit();
+	}
+
+	onAudioLoadStart(event: Event): void {
+		// When audio element starts loading new content, request volume reapplication
+		console.log('Audio loadstart event for', this.userName, '- requesting volume reapplication');
+		setTimeout(() => {
+			this.requestVolumeReapplication();
+		}, 100);
+	}
+
+	onScreenAudioLoadStart(event: Event): void {
+		// When screen audio element starts loading new content, request volume reapplication
+		console.log('Screen audio loadstart event for', this.userName, '- requesting volume reapplication');
+		setTimeout(() => {
+			this.requestVolumeReapplication();
+		}, 100);
+	}
+
+	private requestVolumeReapplication(): void {
+		// Emit a custom event that the parent component can listen to
+		const event = new CustomEvent('requestVolumeReapplication', {
+			detail: { participantId: this.userName },
+			bubbles: true
+		});
+		document.dispatchEvent(event);
 	}
 
 	ngOnDestroy(): void {

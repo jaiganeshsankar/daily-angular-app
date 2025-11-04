@@ -22,6 +22,7 @@ export class MainstageScreenShareTileComponent implements OnInit, OnDestroy {
 
 	screenVideoStream: MediaStream | undefined;
 	screenAudioStream: MediaStream | undefined;
+	playbackVolume: number = 1; // Default volume for screenshare audio
 
 	constructor(
 		private readonly elementRef: ElementRef,

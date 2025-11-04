@@ -5,6 +5,11 @@
 			playsInline class="video-element screen-share-video" [srcObject]="screenVideoStream"></video>
 		<audio *ngIf="screenAudioStream && !local" autoPlay playsInline [srcObject]="screenAudioStream">
 			<track kind="captions" />
-		</audio>
-	</div>
-</div>
+			<audio 
+				*ngIf="screenAudioStream && !local" 
+				autoPlay 
+				playsInline 
+				[srcObject]="screenAudioStream"
+				[volume]="playbackVolume">
+				<track kind="captions" />
+			</audio>
