@@ -501,6 +501,14 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                         layout: newLayoutOptions 
                     });
                     console.log('✅ Live stream updated successfully');
+                    
+                    // Sync recording layout update
+                    try {
+                        await this.callObject.updateRecording({ layout: newLayoutOptions });
+                        console.log('✅ Cloud recording layout updated successfully');
+                    } catch (recordingUpdateError) {
+                        console.warn('⚠️ Failed to update recording layout (may be initializing):', recordingUpdateError);
+                    }
                 }
             } catch (updateError) {
                 console.error('❌ Failed to update live stream:', updateError);
@@ -874,6 +882,19 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             const result = await this.callObject.startLiveStreaming(streamingConfig);
             console.log('✅ Live streaming start result:', result);
             
+            // Start recording with the same layout configuration
+            const recordingOptions = {
+                layout: layoutOptions,
+                maxDuration: 86400, // 24 hours in seconds
+                minIdleTimeOut: 60,  // Stop if empty/idle for 1 minute
+                width: 1920,         // Full HD resolution
+                height: 1080
+            };
+            
+            console.log('🎥 Starting cloud recording with config:', recordingOptions);
+            const recordingResult = await this.callObject.startRecording(recordingOptions);
+            console.log('✅ Cloud recording start result:', recordingResult);
+            
         } catch (error) {
             console.error('❌ Failed to start live stream:', error);
             console.error('Error details:', {
@@ -899,6 +920,11 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             
             const result = await this.callObject.stopLiveStreaming();
             console.log('Live streaming stop result:', result);
+            
+            // Stop recording with stream
+            console.log('🛑 Stopping cloud recording...');
+            const recordingStopResult = await this.callObject.stopRecording();
+            console.log('✅ Cloud recording stop result:', recordingStopResult);
             
         } catch (error) {
             console.error('Failed to stop live stream:', error);
@@ -1079,6 +1105,14 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                             layout: newLayoutOptions 
                         });
                         console.log('✅ Live stream updated for screen sharing change');
+                        
+                        // Sync recording layout update
+                        try {
+                            await this.callObject!.updateRecording({ layout: newLayoutOptions });
+                            console.log('✅ Cloud recording layout updated for screen sharing change');
+                        } catch (recordingUpdateError) {
+                            console.warn('⚠️ Failed to update recording layout for screen sharing (may be initializing):', recordingUpdateError);
+                        }
                     } catch (updateError: any) {
                         console.error('❌ Failed to update live stream for screen sharing:', updateError);
                         this.error = 'Failed to update live stream for screen sharing. Please try again.';
@@ -1339,6 +1373,14 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                             layout: newLayoutOptions 
                         });
                         console.log('✅ Live stream layout updated successfully');
+                        
+                        // Sync recording layout update
+                        try {
+                            await this.callObject!.updateRecording({ layout: newLayoutOptions });
+                            console.log('✅ Cloud recording layout updated successfully');
+                        } catch (recordingUpdateError) {
+                            console.warn('⚠️ Failed to update recording layout (may be initializing):', recordingUpdateError);
+                        }
                     } catch (updateError: any) {
                         console.error('❌ Failed to update live stream layout:', updateError);
                         this.error = 'Failed to update live stream layout. Please try again.';
