@@ -1318,16 +1318,28 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         this.error = 'Live streaming error occurred. Please try again.';
         this.liveStreamService.setLiveState(false);
     };
-    
 
-    
+    // Helper method to get local participant for AV controls
+    getLocalParticipant(): Participant | null {
+        try {
+            const localSessionId = this.getCurrentUserSessionId();
+            return localSessionId ? this.participants[localSessionId] || null : null;
+        } catch (error) {
+            console.warn('Failed to get local participant:', error);
+            return null;
+        }
+    }
 
-
-
-
-
-
-
+    // Helper method to get current user's session ID
+    private getCurrentUserSessionId(): string | null {
+        try {
+            const localParticipant = this.callObject?.participants()?.local;
+            return localParticipant?.session_id || null;
+        } catch (error) {
+            console.warn('Could not get current user session ID:', error);
+            return null;
+        }
+    }
 
     updateScreenSharingParticipant(): void {
         let applyScreenshareLayout = false;
