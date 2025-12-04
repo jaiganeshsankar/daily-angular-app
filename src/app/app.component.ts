@@ -11,6 +11,9 @@ export class AppComponent implements OnInit, OnDestroy {
   title = "daily-custom-angular";
   isLive = false;
   isJoined = false;
+  showTextOverlay = false;
+  showImageOverlay = false;
+  recordingEnabled = true;
   private subscriptions: Subscription[] = [];
 
   constructor(private liveStreamService: LiveStreamService) {}
@@ -22,6 +25,15 @@ export class AppComponent implements OnInit, OnDestroy {
       }),
       this.liveStreamService.joinedState$.subscribe(isJoined => {
         this.isJoined = isJoined;
+      }),
+      this.liveStreamService.textOverlayState$.subscribe(visible => {
+        this.showTextOverlay = visible;
+      }),
+      this.liveStreamService.imageOverlayState$.subscribe(visible => {
+        this.showImageOverlay = visible;
+      }),
+      this.liveStreamService.recordingEnabledState$.subscribe(enabled => {
+        this.recordingEnabled = enabled;
       })
     );
   }
@@ -33,5 +45,13 @@ export class AppComponent implements OnInit, OnDestroy {
   toggleLiveStream(): void {
     this.liveStreamService.toggleLiveStream();
     console.log('Live stream toggled:', this.liveStreamService.isLive);
+  }
+
+  toggleOverlay(type: 'text' | 'image'): void {
+    this.liveStreamService.toggleOverlay(type);
+  }
+
+  toggleRecording(): void {
+    this.liveStreamService.setRecordingEnabled(!this.recordingEnabled);
   }
 }

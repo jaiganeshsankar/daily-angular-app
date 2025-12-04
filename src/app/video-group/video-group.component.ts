@@ -82,10 +82,21 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     isLive: boolean = false;
     private liveStreamSubscription: Subscription;
     private toggleStreamSubscription: Subscription;
+    private toggleOverlaySubscription: Subscription;
+    private textOverlaySubscription: Subscription;
+    private imageOverlaySubscription: Subscription;
+    private recordingEnabledSubscription: Subscription;
 
     // NEW: Unified audio control properties for backstage users
     mainAudioVolume: number = 1; // Controls both stage voices and screenshare audio
     isBackstageMuted: boolean = false;
+    
+    // NEW: Overlay state variables
+    showTextOverlay: boolean = false;
+    showImageOverlay: boolean = false;
+    recordingEnabled: boolean = true;
+    readonly OVERLAY_IMAGE_URL = 'https://assets.daily.co/assets/daily-logo-light.png';
+    readonly OVERLAY_TEXT = 'Live from Daily Angular';
     
     // Volume reapplication event listener
     private volumeReapplicationListener: (event: any) => void;
@@ -140,6 +151,30 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         this.toggleStreamSubscription = this.liveStreamService.toggleStream$.subscribe(() => {
             console.log('🎬 VideoGroupComponent: Received toggle stream event');
             this.toggleLiveStream();
+        });
+
+        // Subscribe to overlay toggle events
+        this.toggleOverlaySubscription = this.liveStreamService.toggleOverlay$.subscribe(({ type }) => {
+            console.log(`🎨 VideoGroupComponent: Received toggle overlay event for ${type}`);
+            this.handleOverlayToggle(type);
+        });
+
+        // Subscribe to overlay state changes
+        this.textOverlaySubscription = this.liveStreamService.textOverlayState$.subscribe(visible => {
+            console.log('📝 Text overlay state changed to:', visible);
+            this.showTextOverlay = visible;
+            this.cdr.detectChanges();
+        });
+        
+        this.imageOverlaySubscription = this.liveStreamService.imageOverlayState$.subscribe(visible => {
+            console.log('🖼️ Image overlay state changed to:', visible);
+            this.showImageOverlay = visible;
+            this.cdr.detectChanges();
+        });
+        
+        this.recordingEnabledSubscription = this.liveStreamService.recordingEnabledState$.subscribe(enabled => {
+            console.log('🎥 Recording enabled state changed to:', enabled);
+            this.recordingEnabled = enabled;
         });
 
         // Listen for volume reapplication requests from audio elements
@@ -208,6 +243,18 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         if (this.toggleStreamSubscription) {
             this.toggleStreamSubscription.unsubscribe();
         }
+        if (this.toggleOverlaySubscription) {
+            this.toggleOverlaySubscription.unsubscribe();
+        }
+        if (this.textOverlaySubscription) {
+            this.textOverlaySubscription.unsubscribe();
+        }
+        if (this.imageOverlaySubscription) {
+            this.imageOverlaySubscription.unsubscribe();
+        }
+        if (this.recordingEnabledSubscription) {
+            this.recordingEnabledSubscription.unsubscribe();
+        }
 
         // Update joined state
         this.liveStreamService.setJoinedState(false);
@@ -250,6 +297,21 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             console.log(`Received layout change from ${e.fromId}: ${e.data.layout}`);
             this.selectedLayout = e.data.layout;
             this.reCalculateLayoutData();
+        }
+        
+        // NEW: Handle overlay update messages
+        if (e.data.type === 'OVERLAY_UPDATE' && e.data.overlay && typeof e.data.visible === 'boolean') {
+            console.log(`Received overlay update from ${e.fromId}: ${e.data.overlay} = ${e.data.visible}`);
+            if (e.data.overlay === 'text') {
+                this.showTextOverlay = e.data.visible;
+                this.liveStreamService.setTextOverlayState(e.data.visible);
+            } else if (e.data.overlay === 'image') {
+                this.showImageOverlay = e.data.visible;
+                this.liveStreamService.setImageOverlayState(e.data.visible);
+            }
+            this.updateLiveStreamLayout();
+            // Force change detection to update UI
+            this.cdr.detectChanges();
         }
     };
 
@@ -493,7 +555,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         if (this.isLive) {
             console.log('🔄 Live stream is active - updating participants due to role change...');
             try {
-                const newLayoutOptions = this.getStreamingLayoutOptions();
+                const newLayoutOptions = this.getStreamingLayoutOptionsForUpdate();
                 console.log('🔄 Updating live stream with new layout:', newLayoutOptions);
                 
                 if (this.callObject) {
@@ -502,12 +564,14 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                     });
                     console.log('✅ Live stream updated successfully');
                     
-                    // Sync recording layout update
-                    try {
-                        await this.callObject.updateRecording({ layout: newLayoutOptions });
-                        console.log('✅ Cloud recording layout updated successfully');
-                    } catch (recordingUpdateError) {
-                        console.warn('⚠️ Failed to update recording layout (may be initializing):', recordingUpdateError);
+                    // Sync recording layout update (if recording is enabled)
+                    if (this.recordingEnabled) {
+                        try {
+                            await this.callObject.updateRecording({ layout: newLayoutOptions });
+                            console.log('✅ Cloud recording layout updated successfully');
+                        } catch (recordingUpdateError) {
+                            console.warn('⚠️ Failed to update recording layout (may be initializing):', recordingUpdateError);
+                        }
                     }
                 }
             } catch (updateError) {
@@ -882,18 +946,22 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             const result = await this.callObject.startLiveStreaming(streamingConfig);
             console.log('✅ Live streaming start result:', result);
             
-            // Start recording with the same layout configuration
-            const recordingOptions = {
-                layout: layoutOptions,
-                maxDuration: 86400, // 24 hours in seconds
-                minIdleTimeOut: 60,  // Stop if empty/idle for 1 minute
-                width: 1920,         // Full HD resolution
-                height: 1080
-            };
-            
-            console.log('🎥 Starting cloud recording with config:', recordingOptions);
-            const recordingResult = await this.callObject.startRecording(recordingOptions);
-            console.log('✅ Cloud recording start result:', recordingResult);
+            // Start recording with the same layout configuration (if enabled)
+            if (this.recordingEnabled) {
+                const recordingOptions = {
+                    layout: layoutOptions,
+                    maxDuration: 86400, // 24 hours in seconds
+                    minIdleTimeOut: 60,  // Stop if empty/idle for 1 minute
+                    width: 1920,         // Full HD resolution
+                    height: 1080
+                };
+                
+                console.log('🎥 Starting cloud recording with config:', recordingOptions);
+                const recordingResult = await this.callObject.startRecording(recordingOptions);
+                console.log('✅ Cloud recording start result:', recordingResult);
+            } else {
+                console.log('⭕ Recording disabled - skipping cloud recording');
+            }
             
         } catch (error) {
             console.error('❌ Failed to start live stream:', error);
@@ -921,10 +989,14 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             const result = await this.callObject.stopLiveStreaming();
             console.log('Live streaming stop result:', result);
             
-            // Stop recording with stream
-            console.log('🛑 Stopping cloud recording...');
-            const recordingStopResult = await this.callObject.stopRecording();
-            console.log('✅ Cloud recording stop result:', recordingStopResult);
+            // Stop recording with stream (if it was started)
+            if (this.recordingEnabled) {
+                console.log('🛑 Stopping cloud recording...');
+                const recordingStopResult = await this.callObject.stopRecording();
+                console.log('✅ Cloud recording stop result:', recordingStopResult);
+            } else {
+                console.log('⭕ Recording was disabled - no recording to stop');
+            }
             
         } catch (error) {
             console.error('Failed to stop live stream:', error);
@@ -950,9 +1022,31 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             console.log('⚫ No stage participants - returning black background layout');
             return {
                 preset: 'custom' as const,
+                composition_id: 'daily:baseline',
                 participants: { video: [], audio: [] },
+                session_assets: { 
+                    'logo': this.OVERLAY_IMAGE_URL 
+                },
                 composition_params: { 
-                    'background-color': '#000000' 
+                    'background-color': '#000000',
+                    // Text overlay parameters (correct Daily.co VCS format)
+                    'showTextOverlay': this.showTextOverlay,
+                    'text.content': this.OVERLAY_TEXT,
+                    'text.align_horizontal': 'right',
+                    'text.align_vertical': 'bottom',
+                    'text.fontFamily': 'DMSans',
+                    'text.fontWeight': '600',
+                    'text.fontSize_gu': 2.5,
+                    'text.color': 'rgba(255, 255, 255, 0.95)',
+                    'text.strokeColor': 'rgba(0, 0, 0, 0.8)',
+                    'text.stroke_gu': 0.5,
+                    // Image overlay parameters
+                    'showImageOverlay': this.showImageOverlay,
+                    'image.assetName': 'logo',
+                    'image.position': 'top-right',
+                    'image.height_gu': 6,
+                    'image.margin_gu': 1.5,
+                    'image.opacity': 1
                 }
             };
         }
@@ -960,88 +1054,246 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         // Handle non-empty stage scenario with VCS baseline composition
         console.log('🎭 Stage participants found, using VCS baseline composition for layout:', this.selectedLayout);
         
-        // Base layout with participants filter
+        // Base layout with participants filter and VCS configuration
+        const layout: any = {
+            preset: 'custom' as const,
+            composition_id: 'daily:baseline',
+            participants: {
+                video: stageParticipantIds,
+                audio: stageParticipantIds
+            },
+            session_assets: { 
+                'logo': this.OVERLAY_IMAGE_URL 
+            },
+            composition_params: {
+                // Text overlay parameters (correct Daily.co VCS format)
+                'showTextOverlay': this.showTextOverlay,
+                'text.content': this.OVERLAY_TEXT,
+                'text.align_horizontal': 'right',
+                'text.align_vertical': 'bottom',
+                'text.fontFamily': 'DMSans',
+                'text.fontWeight': '600',
+                'text.fontSize_gu': 2.5,
+                'text.color': 'rgba(255, 255, 255, 0.95)',
+                'text.strokeColor': 'rgba(0, 0, 0, 0.8)',
+                'text.stroke_gu': 0.5,
+                // Image overlay parameters
+                'showImageOverlay': this.showImageOverlay,
+                'image.assetName': 'logo',
+                'image.position': 'top-right',
+                'image.height_gu': 6,
+                'image.margin_gu': 1.5,
+                'image.opacity': 1
+            }
+        };
+
+        // Map selectedLayout to VCS mode and add mode-specific parameters
+        let vcsMode: string;
+        switch (this.selectedLayout) {
+            case VideoLayout.TILED:
+                vcsMode = 'grid';
+                break;
+            case VideoLayout.PINNED_HORIZONTAL:
+                vcsMode = 'dominant';
+                break;
+            case VideoLayout.PINNED_VERTICAL:
+                vcsMode = 'dominant';
+                break;
+            case VideoLayout.FULL_SCREEN:
+                vcsMode = 'dominant';
+                break;
+            default:
+                vcsMode = 'grid';
+        }
+        
+        // Add the VCS mode to composition params
+        layout.composition_params.mode = vcsMode;
+
+        // Add mode-specific VCS parameters
+        if (vcsMode === 'dominant') {
+            layout.composition_params['videoSettings.preferScreenshare'] = true;
+            layout.composition_params['videoSettings.maxCamStreams'] = stageParticipantIds.length;
+            layout.composition_params['videoSettings.scaleMode'] = 'fit';
+            layout.composition_params['videoSettings.showParticipantLabels'] = false;
+            
+            if (this.selectedLayout === VideoLayout.PINNED_VERTICAL) {
+                layout.composition_params['videoSettings.dominant.position'] = 'top';
+                layout.composition_params['videoSettings.dominant.splitPos'] = 0.7;
+            } else if (this.selectedLayout === VideoLayout.PINNED_HORIZONTAL) {
+                layout.composition_params['videoSettings.dominant.position'] = 'left';
+                layout.composition_params['videoSettings.dominant.splitPos'] = 0.75;
+            }
+            
+            if (this.selectedLayout === VideoLayout.FULL_SCREEN) {
+                layout.composition_params['videoSettings.maxCamStreams'] = 1;
+                layout.composition_params['videoSettings.omitAudioOnly'] = true;
+                if (this.screenSharingParticipant) {
+                    layout.composition_params['videoSettings.preferredParticipantIds'] = this.screenSharingParticipant.id;
+                }
+            } else {
+                layout.composition_params['videoSettings.dominant.numChiclets'] = Math.min(5, stageParticipantIds.length);
+                layout.composition_params['videoSettings.dominant.followDomFlag'] = false;
+                layout.composition_params['videoSettings.dominant.itemInterval_gu'] = 0.2;
+                layout.composition_params['videoSettings.dominant.outerPadding_gu'] = 0.2;
+                layout.composition_params['videoSettings.dominant.splitMargin_gu'] = 0;
+            }
+        } else {
+            layout.composition_params['videoSettings.showParticipantLabels'] = false;
+        }
+
+        console.log('🎥 Final VCS layout config with overlays:', {
+            preset: layout.preset,
+            composition_id: layout.composition_id,
+            mode: vcsMode,
+            participantCount: stageParticipantIds.length,
+            screenSharing: !!this.screenSharingParticipant,
+            textOverlay: this.showTextOverlay,
+            imageOverlay: this.showImageOverlay,
+            session_assets: layout.session_assets,
+            overlay_params: {
+                showTextOverlay: layout.composition_params.showTextOverlay,
+                showImageOverlay: layout.composition_params.showImageOverlay,
+                textContent: layout.composition_params['text.content']
+            }
+        });
+        
+        console.log('Full layout object:', JSON.stringify(layout, null, 2));
+        
+        return layout;
+    }
+
+    // NEW: Get layout options for updates (excludes composition_id and session_assets)
+    private getStreamingLayoutOptionsForUpdate(): any {
+        // Filter participants to get stage participant IDs
+        const stageParticipantIds = Object.values(this.participants)
+            .filter(participant => participant.role === 'stage')
+            .map(participant => participant.id);
+
+        console.log('🎯 Getting streaming layout update options for stage participants:', stageParticipantIds);
+
+        // Handle empty stage scenario
+        if (stageParticipantIds.length === 0) {
+            console.log('⚫ No stage participants - returning black background layout for update');
+            return {
+                preset: 'custom' as const,
+                participants: { video: [], audio: [] },
+                composition_params: { 
+                    'background-color': '#000000',
+                    // Text overlay parameters (correct Daily.co VCS format)
+                    'showTextOverlay': this.showTextOverlay,
+                    'text.content': this.OVERLAY_TEXT,
+                    'text.align_horizontal': 'right',
+                    'text.align_vertical': 'bottom',
+                    'text.fontFamily': 'DMSans',
+                    'text.fontWeight': '600',
+                    'text.fontSize_gu': 2.5,
+                    'text.color': 'rgba(255, 255, 255, 0.95)',
+                    'text.strokeColor': 'rgba(0, 0, 0, 0.8)',
+                    'text.stroke_gu': 0.5,
+                    // Image overlay parameters
+                    'showImageOverlay': this.showImageOverlay,
+                    'image.assetName': 'logo',
+                    'image.position': 'top-right',
+                    'image.height_gu': 6,
+                    'image.margin_gu': 1.5,
+                    'image.opacity': 1
+                }
+            };
+        }
+
+        // Handle non-empty stage scenario with VCS baseline composition
+        console.log('🎭 Stage participants found, using VCS baseline composition for layout update:', this.selectedLayout);
+        
+        // Base layout with participants filter (no composition_id or session_assets for updates)
         const layout: any = {
             preset: 'custom' as const,
             participants: {
                 video: stageParticipantIds,
                 audio: stageParticipantIds
             },
-            composition_params: {}
+            composition_params: {
+                // Text overlay parameters (correct Daily.co VCS format)
+                'showTextOverlay': this.showTextOverlay,
+                'text.content': this.OVERLAY_TEXT,
+                'text.align_horizontal': 'right',
+                'text.align_vertical': 'bottom',
+                'text.fontFamily': 'DMSans',
+                'text.fontWeight': '600',
+                'text.fontSize_gu': 2.5,
+                'text.color': 'rgba(255, 255, 255, 0.95)',
+                'text.strokeColor': 'rgba(0, 0, 0, 0.8)',
+                'text.stroke_gu': 0.5,
+                // Image overlay parameters
+                'showImageOverlay': this.showImageOverlay,
+                'image.assetName': 'logo',
+                'image.position': 'top-right',
+                'image.height_gu': 6,
+                'image.margin_gu': 1.5,
+                'image.opacity': 1
+            }
         };
 
-        // Set VCS baseline composition parameters based on selectedLayout
+        // Map selectedLayout to VCS mode and add mode-specific parameters
+        let vcsMode: string;
         switch (this.selectedLayout) {
             case VideoLayout.TILED:
-                // Grid layout - no screen share (UI enforces this)
-                layout.composition_params = {
-                    mode: 'grid',
-                    'videoSettings.showParticipantLabels': false
-                };
+                vcsMode = 'grid';
                 break;
-                
-            case VideoLayout.PINNED_VERTICAL:
-                // Screen share with thumbnails at bottom (UI enforces screen share exists)
-                layout.composition_params = {
-                    mode: 'dominant',
-                    'videoSettings.preferScreenshare': true,
-                    'videoSettings.dominant.position': 'top',
-                    'videoSettings.dominant.splitPos': 0.7,
-                    'videoSettings.dominant.numChiclets': Math.min(5, stageParticipantIds.length),
-                    'videoSettings.dominant.followDomFlag': false,
-                    'videoSettings.dominant.itemInterval_gu': 0.2,
-                    'videoSettings.dominant.outerPadding_gu': 0.2,
-                    'videoSettings.dominant.splitMargin_gu': 0,
-                    'videoSettings.maxCamStreams': stageParticipantIds.length,
-                    'videoSettings.scaleMode': 'fit',
-                    'videoSettings.showParticipantLabels': false
-                };
-                break;
-                
             case VideoLayout.PINNED_HORIZONTAL:
-                // Screen share with thumbnails on right (UI enforces screen share exists)
-                layout.composition_params = {
-                    mode: 'dominant',
-                    'videoSettings.preferScreenshare': true,
-                    'videoSettings.dominant.position': 'left',
-                    'videoSettings.dominant.splitPos': 0.75,
-                    'videoSettings.dominant.numChiclets': Math.min(5, stageParticipantIds.length),
-                    'videoSettings.dominant.followDomFlag': false,
-                    'videoSettings.dominant.itemInterval_gu': 0.2,
-                    'videoSettings.dominant.outerPadding_gu': 0.2,
-                    'videoSettings.dominant.splitMargin_gu': 0,
-                    'videoSettings.maxCamStreams': stageParticipantIds.length,
-                    'videoSettings.scaleMode': 'fit',
-                    'videoSettings.showParticipantLabels': false
-                };
+                vcsMode = 'dominant';
                 break;
-                
+            case VideoLayout.PINNED_VERTICAL:
+                vcsMode = 'dominant';
+                break;
             case VideoLayout.FULL_SCREEN:
-                // Only screen share, no participants (UI enforces screen share exists)
-                layout.composition_params = {
-                    mode: 'single',
-                    'videoSettings.preferScreenshare': true,
-                    'videoSettings.maxCamStreams': 1,
-                    'videoSettings.omitAudioOnly': true
-                };
-                // Ensure we get the screen share
+                vcsMode = 'dominant';
+                break;
+            default:
+                vcsMode = 'grid';
+        }
+        
+        // Add the VCS mode to composition params
+        layout.composition_params.mode = vcsMode;
+
+        // Add mode-specific VCS parameters
+        if (vcsMode === 'dominant') {
+            layout.composition_params['videoSettings.preferScreenshare'] = true;
+            layout.composition_params['videoSettings.maxCamStreams'] = stageParticipantIds.length;
+            layout.composition_params['videoSettings.scaleMode'] = 'fit';
+            layout.composition_params['videoSettings.showParticipantLabels'] = false;
+            
+            if (this.selectedLayout === VideoLayout.PINNED_VERTICAL) {
+                layout.composition_params['videoSettings.dominant.position'] = 'top';
+                layout.composition_params['videoSettings.dominant.splitPos'] = 0.7;
+            } else if (this.selectedLayout === VideoLayout.PINNED_HORIZONTAL) {
+                layout.composition_params['videoSettings.dominant.position'] = 'left';
+                layout.composition_params['videoSettings.dominant.splitPos'] = 0.75;
+            }
+            
+            if (this.selectedLayout === VideoLayout.FULL_SCREEN) {
+                layout.composition_params['videoSettings.maxCamStreams'] = 1;
+                layout.composition_params['videoSettings.omitAudioOnly'] = true;
                 if (this.screenSharingParticipant) {
                     layout.composition_params['videoSettings.preferredParticipantIds'] = this.screenSharingParticipant.id;
                 }
-                break;
-                
-            default:
-                layout.composition_params = {
-                    mode: 'grid',
-                    'videoSettings.showParticipantLabels': false
-                };
+            } else {
+                layout.composition_params['videoSettings.dominant.numChiclets'] = Math.min(5, stageParticipantIds.length);
+                layout.composition_params['videoSettings.dominant.followDomFlag'] = false;
+                layout.composition_params['videoSettings.dominant.itemInterval_gu'] = 0.2;
+                layout.composition_params['videoSettings.dominant.outerPadding_gu'] = 0.2;
+                layout.composition_params['videoSettings.dominant.splitMargin_gu'] = 0;
+            }
+        } else {
+            layout.composition_params['videoSettings.showParticipantLabels'] = false;
         }
 
-        console.log('🎥 Final VCS layout config:', {
+        console.log('🎥 Final VCS layout update config with overlays:', {
             preset: layout.preset,
-            mode: layout.composition_params.mode,
+            mode: vcsMode,
             participantCount: stageParticipantIds.length,
-            screenSharing: !!this.screenSharingParticipant
+            screenSharing: !!this.screenSharingParticipant,
+            textOverlay: this.showTextOverlay,
+            imageOverlay: this.showImageOverlay
         });
         
         return layout;
@@ -1066,6 +1318,16 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         this.error = 'Live streaming error occurred. Please try again.';
         this.liveStreamService.setLiveState(false);
     };
+    
+
+    
+
+
+
+
+
+
+
 
     updateScreenSharingParticipant(): void {
         let applyScreenshareLayout = false;
@@ -1095,23 +1357,25 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         if (this.isLive && previousScreenSharingParticipant !== this.screenSharingParticipant) {
             console.log('🔄 Live stream is active - updating due to screen sharing change...');
             try {
-                const newLayoutOptions = this.getStreamingLayoutOptions();
-                console.log('🔄 Updating live stream with new screen sharing layout:', newLayoutOptions);
+                console.log('🔄 Updating live stream with new screen sharing layout...');
                 
                 // Update live streaming layout asynchronously
                 (async () => {
                     try {
+                        const newLayoutOptions = this.getStreamingLayoutOptionsForUpdate();
                         await this.callObject!.updateLiveStreaming({ 
                             layout: newLayoutOptions 
                         });
                         console.log('✅ Live stream updated for screen sharing change');
                         
-                        // Sync recording layout update
-                        try {
-                            await this.callObject!.updateRecording({ layout: newLayoutOptions });
-                            console.log('✅ Cloud recording layout updated for screen sharing change');
-                        } catch (recordingUpdateError) {
-                            console.warn('⚠️ Failed to update recording layout for screen sharing (may be initializing):', recordingUpdateError);
+                        // Sync recording layout update (if recording is enabled)
+                        if (this.recordingEnabled) {
+                            try {
+                                await this.callObject!.updateRecording({ layout: newLayoutOptions });
+                                console.log('✅ Cloud recording layout updated for screen sharing change');
+                            } catch (recordingUpdateError) {
+                                console.warn('⚠️ Failed to update recording layout for screen sharing (may be initializing):', recordingUpdateError);
+                            }
                         }
                     } catch (updateError: any) {
                         console.error('❌ Failed to update live stream for screen sharing:', updateError);
@@ -1239,6 +1503,74 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     toggleVirtualBgMenu(): void {
         this.showVirtualBgMenu = !this.showVirtualBgMenu;
     }
+    
+    // NEW: Handle overlay toggle from service
+    private handleOverlayToggle(type: 'text' | 'image'): void {
+        if (!this.joined || !this.callObject) return;
+        
+        let newValue: boolean;
+        if (type === 'text') {
+            newValue = !this.showTextOverlay;
+            this.showTextOverlay = newValue;
+            this.liveStreamService.setTextOverlayState(newValue);
+        } else {
+            newValue = !this.showImageOverlay;
+            this.showImageOverlay = newValue;
+            this.liveStreamService.setImageOverlayState(newValue);
+        }
+        
+        console.log(`🎨 Toggling ${type} overlay to:`, newValue);
+        console.log(`🔍 Current overlay states - Text: ${this.showTextOverlay}, Image: ${this.showImageOverlay}`);
+        
+        // Sync state with other users
+        this.callObject.sendAppMessage({
+            type: 'OVERLAY_UPDATE',
+            overlay: type,
+            visible: newValue
+        }, '*');
+        
+        // Update live stream layout if currently streaming
+        this.updateLiveStreamLayout();
+        
+        // Force change detection
+        this.cdr.detectChanges();
+    }
+    
+    // NEW: Helper method to update live stream layout
+    private updateLiveStreamLayout(): void {
+        if (this.isLive && this.callObject) {
+            console.log('🔄 Live stream is active - updating layout due to overlay change...');
+            try {
+                const newLayoutOptions = this.getStreamingLayoutOptionsForUpdate();
+                console.log('🔄 Updating live stream with new overlay layout:', newLayoutOptions);
+                
+                (async () => {
+                    try {
+                        await this.callObject!.updateLiveStreaming({ 
+                            layout: newLayoutOptions 
+                        });
+                        console.log('✅ Live stream layout updated for overlay change');
+                        
+                        // Sync recording layout update (if recording is enabled)
+                        if (this.recordingEnabled) {
+                            try {
+                                await this.callObject!.updateRecording({ layout: newLayoutOptions });
+                                console.log('✅ Cloud recording layout updated for overlay change');
+                            } catch (recordingUpdateError) {
+                                console.warn('⚠️ Failed to update recording layout for overlay change (may be initializing):', recordingUpdateError);
+                            }
+                        }
+                    } catch (updateError: any) {
+                        console.error('❌ Failed to update live stream layout for overlay change:', updateError);
+                        this.error = 'Failed to update live stream layout for overlay change. Please try again.';
+                        setTimeout(() => { this.error = ''; }, 5000);
+                    }
+                })();
+            } catch (error) {
+                console.error('❌ Error preparing overlay layout update:', error);
+            }
+        }
+    }
 
     async applyVirtualBackground(option: VirtualBackgroundOption): Promise<void> {
         if (!this.callObject || !this.joined || this.isLoadingVirtualBg) return;
@@ -1360,39 +1692,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         this.showLayoutMenu = false;
 
         // Update live stream layout if currently streaming
-        if (this.isLive) {
-            console.log('🔄 Live stream is active - updating layout due to user selection...');
-            try {
-                const newLayoutOptions = this.getStreamingLayoutOptions();
-                console.log('🔄 Updating live stream with new layout:', newLayoutOptions);
-                
-                // Update live streaming layout asynchronously
-                (async () => {
-                    try {
-                        await this.callObject!.updateLiveStreaming({ 
-                            layout: newLayoutOptions 
-                        });
-                        console.log('✅ Live stream layout updated successfully');
-                        
-                        // Sync recording layout update
-                        try {
-                            await this.callObject!.updateRecording({ layout: newLayoutOptions });
-                            console.log('✅ Cloud recording layout updated successfully');
-                        } catch (recordingUpdateError) {
-                            console.warn('⚠️ Failed to update recording layout (may be initializing):', recordingUpdateError);
-                        }
-                    } catch (updateError: any) {
-                        console.error('❌ Failed to update live stream layout:', updateError);
-                        this.error = 'Failed to update live stream layout. Please try again.';
-                        setTimeout(() => { this.error = ''; }, 5000);
-                    }
-                })();
-            } catch (error) {
-                console.error('❌ Error preparing layout update:', error);
-                this.error = 'Failed to update live stream layout. Please try again.';
-                setTimeout(() => { this.error = ''; }, 5000);
-            }
-        }
+        this.updateLiveStreamLayout();
 
         console.log('Layout changed to:', layout);
         this.reCalculateLayoutData();

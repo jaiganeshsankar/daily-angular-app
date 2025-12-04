@@ -7,6 +7,18 @@
         <span class="header-title">Daily Angular Demo</span>
       </div>
       <div class="right-section">
+        <button *ngIf="isJoined" class="overlay-btn" (click)="toggleOverlay('text')" 
+          [class.active]="showTextOverlay" [title]="showTextOverlay ? 'Hide Text' : 'Show Text'">
+          <span>{{ showTextOverlay ? 'Hide Text' : 'Show Text' }}</span>
+        </button>
+        <button *ngIf="isJoined" class="overlay-btn" (click)="toggleOverlay('image')" 
+          [class.active]="showImageOverlay" [title]="showImageOverlay ? 'Hide Image' : 'Show Image'">
+          <span>{{ showImageOverlay ? 'Hide Image' : 'Show Image' }}</span>
+        </button>
+        <button *ngIf="isJoined" class="recording-btn" (click)="toggleRecording()" 
+          [class.active]="recordingEnabled" [title]="recordingEnabled ? 'Disable Recording' : 'Enable Recording'">
+          <span>{{ recordingEnabled ? '🔴 Recording' : '⭕ No Recording' }}</span>
+        </button>
         <button *ngIf="isJoined" class="go-live-btn" [class.live]="isLive" (click)="toggleLiveStream()" 
           [title]="isLive ? 'End Live' : 'Go Live'">
           <span>{{ isLive ? 'End Live' : 'Go Live' }}</span>

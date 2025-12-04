@@ -97,6 +97,72 @@ header img {
   background: rgba(220, 53, 69, 0.1);
 }
 
+/* Overlay Button Styles */
+.overlay-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #6c757d;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-right: 8px;
+  box-shadow: 0 2px 4px rgba(108, 117, 125, 0.2);
+}
+
+.overlay-btn:hover {
+  background: #5a6268;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(108, 117, 125, 0.3);
+}
+
+.overlay-btn.active {
+  background: #28a745;
+  box-shadow: 0 2px 4px rgba(40, 167, 69, 0.2);
+}
+
+.overlay-btn.active:hover {
+  background: #218838;
+}
+
+/* Recording Button Styles */
+.recording-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: #6c757d;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-right: 8px;
+  box-shadow: 0 2px 4px rgba(108, 117, 125, 0.2);
+}
+
+.recording-btn:hover {
+  background: #5a6268;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(108, 117, 125, 0.3);
+}
+
+.recording-btn.active {
+  background: #dc3545;
+  box-shadow: 0 2px 4px rgba(220, 53, 69, 0.2);
+}
+
+.recording-btn.active:hover {
+  background: #c82333;
+}
+
 .live-dot {
   width: 8px;
   height: 8px;
