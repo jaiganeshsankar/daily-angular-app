@@ -1129,12 +1129,38 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         console.log('🎭 Stage participants found, using VCS baseline composition for layout:', this.selectedLayout);
         
         // Base layout with participants filter and VCS configuration
+        let initialVideoParticipants = stageParticipantIds;
+        let initialAudioParticipants = stageParticipantIds;
+        
+        // For Presentation layout, we need to be more selective about participants
+        if (this.selectedLayout === VideoLayout.PRESENTATION && this.screenSharingParticipant) {
+            // For Presentation: ALWAYS show exactly ONE camera in sidebar (active speaker preferred)
+            if (this.activeSpeakerId) {
+                // Use active speaker - can be the same person as screen sharer
+                initialVideoParticipants = [this.activeSpeakerId];
+                console.log('📡 GUARANTEED 1 tile: Using active speaker for sidebar:', this.participants[this.activeSpeakerId]?.userName);
+            } else {
+                // No active speaker - use any ONE stage participant
+                initialVideoParticipants = stageParticipantIds.length > 0 ? [stageParticipantIds[0]] : [];
+                console.log('📡 GUARANTEED 1 tile: No active speaker - using first stage participant:', 
+                    stageParticipantIds.length > 0 ? this.participants[stageParticipantIds[0]]?.userName : 'none');
+            }
+            
+            console.log('📡 Presentation layout - filtering initial participants:', {
+                originalStage: stageParticipantIds,
+                screenSharer: this.screenSharingParticipant?.id,
+                activeSpeaker: this.activeSpeakerId,
+                filteredVideo: initialVideoParticipants,
+                willShowBothScreenAndCamera: this.activeSpeakerId === this.screenSharingParticipant?.id
+            });
+        }
+        
         const layout: any = {
             preset: 'custom' as const,
             composition_id: 'daily:baseline',
             participants: {
-                video: stageParticipantIds,
-                audio: stageParticipantIds
+                video: initialVideoParticipants,
+                audio: initialAudioParticipants
             },
             session_assets: { 
                 'logo': this.OVERLAY_IMAGE_URL 
@@ -1231,50 +1257,17 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 layout.composition_params['videoSettings.maxCamStreams'] = 1; // Only one tile in sidebar
                 layout.composition_params['videoSettings.omitAudioOnly'] = true;
                 layout.composition_params['videoSettings.showParticipantLabels'] = true; // Show names for tracking
+                layout.composition_params['videoSettings.prioritizeScreenshare'] = true; // Ensure screenshare gets priority
+                layout.composition_params['videoSettings.dominant.followDomFlag'] = false; // Don't auto-switch dominant
                 
-                // Explicit video tracks configuration
-                const videoTracks = [];
-                
-                // 1. Add screenshare track (dominant/main area) - ALWAYS first priority
-                if (this.screenSharingParticipant?.screenVideoTrack) {
-                    videoTracks.push({ session_id: this.screenSharingParticipant.id, trackName: 'screenVideo' });
-                    console.log('📡 Added screenshare track for main area:', this.screenSharingParticipant.userName);
-                }
-                
-                // 2. Add active speaker track (sidebar) - NEVER the same person as screen sharer
-                let sidebarParticipant = null;
-                
-                // Priority 1: Use active speaker if they exist, are on stage, AND are NOT the screen sharer
-                if (this.activeSpeakerId) {
-                    const activeSpeaker = this.participants[this.activeSpeakerId];
-                    if (activeSpeaker && activeSpeaker.role === 'stage' && activeSpeaker.id !== this.screenSharingParticipant?.id) {
-                        sidebarParticipant = activeSpeaker;
-                        console.log('📡 Using active speaker for presentation sidebar:', activeSpeaker.userName);
-                    }
-                }
-                
-                // Priority 2: If no valid active speaker, find any other stage participant (NOT the screen sharer)
-                if (!sidebarParticipant) {
-                    const stageParticipants = Object.values(this.participants).filter(p => 
-                        p.role === 'stage' && p.id !== this.screenSharingParticipant?.id
-                    );
-                    sidebarParticipant = stageParticipants[0] || null;
-                    if (sidebarParticipant) {
-                        console.log('📡 Using fallback stage participant for presentation sidebar:', sidebarParticipant.userName);
-                    }
-                }
-                
-                // Add sidebar participant (camera track only)
-                if (sidebarParticipant) {
-                    videoTracks.push({ session_id: sidebarParticipant.id, trackName: 'video' });
-                }
-                
-                // Override participants.video with explicit tracks
-                layout.participants.video = videoTracks;
-                // Keep all stage participants for audio
-                layout.participants.audio = stageParticipantIds;
-                
-                console.log('📡 Presentation layout video tracks:', videoTracks);
+                // Presentation layout relies on VCS automatic screenshare prioritization
+                // We've filtered the participants list above to only include the active speaker for sidebar
+                console.log('📡 Presentation layout - using VCS auto-screenshare with active speaker:', {
+                    screenSharer: this.screenSharingParticipant?.userName,
+                    sidebarParticipant: initialVideoParticipants.map(id => this.participants[id]?.userName),
+                    showingBothTracksForSamePerson: this.activeSpeakerId === this.screenSharingParticipant?.id,
+                    maxCamStreams: layout.composition_params['videoSettings.maxCamStreams']
+                });
             }
             
             if (this.selectedLayout !== VideoLayout.PRESENTATION) {
