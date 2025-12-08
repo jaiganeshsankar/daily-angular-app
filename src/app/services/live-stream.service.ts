@@ -12,6 +12,7 @@ export class LiveStreamService {
   private imageOverlaySubject = new BehaviorSubject<boolean>(false);
   private toggleOverlaySubject = new Subject<{ type: 'text' | 'image' }>();
   private recordingEnabledSubject = new BehaviorSubject<boolean>(true); // Default: recording enabled
+  private toggleRecordingSubject = new Subject<void>();
 
   liveState$ = this.liveStateSubject.asObservable();
   joinedState$ = this.joinedStateSubject.asObservable();
@@ -20,6 +21,7 @@ export class LiveStreamService {
   imageOverlayState$ = this.imageOverlaySubject.asObservable();
   toggleOverlay$ = this.toggleOverlaySubject.asObservable();
   recordingEnabledState$ = this.recordingEnabledSubject.asObservable();
+  toggleRecording$ = this.toggleRecordingSubject.asObservable();
 
   setLiveState(isLive: boolean): void {
     this.liveStateSubject.next(isLive);
@@ -64,7 +66,18 @@ export class LiveStreamService {
   }
 
   setRecordingEnabled(enabled: boolean): void {
+    console.log('🎥 LiveStreamService: setRecordingEnabled called with:', enabled);
+    console.log('🎥 Previous state:', this.recordingEnabledSubject.value);
     this.recordingEnabledSubject.next(enabled);
+    console.log('🎥 New state set and broadcast to subscribers');
+  }
+
+  toggleRecording(): void {
+    console.log('🎥 LiveStreamService: toggleRecording called');
+    console.log('🎥 Current recording state:', this.recordingEnabledSubject.value);
+    console.log('🎥 Emitting toggle event to subscribers...');
+    this.toggleRecordingSubject.next();
+    console.log('🎥 Toggle event emitted');
   }
 
   get isRecordingEnabled(): boolean {

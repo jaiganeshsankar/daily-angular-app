@@ -83,6 +83,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     private liveStreamSubscription: Subscription;
     private toggleStreamSubscription: Subscription;
     private toggleOverlaySubscription: Subscription;
+    private toggleRecordingSubscription: Subscription;
     private textOverlaySubscription: Subscription;
     private imageOverlaySubscription: Subscription;
     private recordingEnabledSubscription: Subscription;
@@ -161,6 +162,14 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             console.log(`🎨 VideoGroupComponent: Received toggle overlay event for ${type}`);
             this.handleOverlayToggle(type);
         });
+        
+        // Subscribe to toggle recording events
+        console.log('🎥 VideoGroupComponent: Setting up toggle recording subscription...');
+        this.toggleRecordingSubscription = this.liveStreamService.toggleRecording$.subscribe(() => {
+            console.log('🎥 VideoGroupComponent: Received toggle recording event');
+            this.handleRecordingToggle();
+        });
+        console.log('🎥 VideoGroupComponent: Toggle recording subscription setup complete');
 
         // Subscribe to overlay state changes
         this.textOverlaySubscription = this.liveStreamService.textOverlayState$.subscribe(visible => {
@@ -176,8 +185,13 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         });
         
         this.recordingEnabledSubscription = this.liveStreamService.recordingEnabledState$.subscribe(enabled => {
-            console.log('🎥 Recording enabled state changed to:', enabled);
+            console.log('🎥 VideoGroupComponent: Recording enabled state changed to:', enabled);
+            console.log('🎥 Previous local state:', this.recordingEnabled);
             this.recordingEnabled = enabled;
+            console.log('🎥 Updated local state to:', this.recordingEnabled);
+            this.cdr.markForCheck(); // Mark for check first
+            this.cdr.detectChanges(); // Then trigger detection
+            console.log('🎥 Change detection triggered from subscription');
         });
 
         // Listen for volume reapplication requests from audio elements
@@ -258,6 +272,9 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         if (this.toggleOverlaySubscription) {
             this.toggleOverlaySubscription.unsubscribe();
         }
+        if (this.toggleRecordingSubscription) {
+            this.toggleRecordingSubscription.unsubscribe();
+        }
         if (this.textOverlaySubscription) {
             this.textOverlaySubscription.unsubscribe();
         }
@@ -328,6 +345,23 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             // Force change detection to update UI
             this.cdr.detectChanges();
         }
+        
+        // NEW: Handle recording state change messages
+        if (e.data.type === 'RECORDING_STATE_CHANGE' && typeof e.data.recordingEnabled === 'boolean') {
+            console.log(`📡 Received recording state change from ${e.fromId}: ${e.data.recordingEnabled}`);
+            console.log('🎥 Current local recording state:', this.recordingEnabled);
+            
+            // Update local state to match the sender's state
+            this.liveStreamService.setRecordingEnabled(e.data.recordingEnabled);
+            console.log('🎥 Updated local recording state to:', e.data.recordingEnabled);
+            
+            // Force change detection to update UI
+            this.cdr.markForCheck();
+            this.cdr.detectChanges();
+            console.log('🎥 UI updated from app message');
+        }
+        
+
     };
 
 
@@ -1736,6 +1770,41 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 console.error('❌ Error preparing overlay layout update:', error);
             }
         }
+    }
+
+    // NEW: Handle recording toggle from service (like live stream toggle)
+    private handleRecordingToggle(): void {
+        console.log('🎥 VideoGroupComponent: handleRecordingToggle called');
+        console.log('🎥 Current state - joined:', this.joined, 'callObject:', !!this.callObject);
+        
+        if (!this.joined || !this.callObject) {
+            console.warn('Cannot toggle recording: not joined or no call object');
+            return;
+        }
+        
+        console.log('🎥 Previous recording state:', this.recordingEnabled);
+        
+        // Toggle local state
+        this.recordingEnabled = !this.recordingEnabled;
+        
+        console.log('🎥 New recording state:', this.recordingEnabled);
+        
+        // Update service state so all components see the change
+        this.liveStreamService.setRecordingEnabled(this.recordingEnabled);
+        
+        // Broadcast the recording state change to all participants
+        console.log('📡 Broadcasting recording state change to all participants:', this.recordingEnabled);
+        this.callObject.sendAppMessage({
+            type: 'RECORDING_STATE_CHANGE',
+            recordingEnabled: this.recordingEnabled
+        }, '*');
+        
+        console.log(`🎥 Recording toggled to: ${this.recordingEnabled}`);
+        
+        // Force change detection
+        this.cdr.markForCheck(); // Mark for check first
+        this.cdr.detectChanges(); // Then trigger detection
+        console.log('🎥 Change detection triggered');
     }
 
     async applyVirtualBackground(option: VirtualBackgroundOption): Promise<void> {
