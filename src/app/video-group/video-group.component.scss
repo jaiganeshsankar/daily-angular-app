@@ -498,6 +498,76 @@
     }
 }
 
+// ========== PRESENTATION LAYOUT (80/20 SPLIT) ==========
+.presentation-layout {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    animation: slideInRight 0.4s ease-out;
+
+    .presentation-main {
+        flex: 4; // 80% width
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 0;
+        overflow: hidden;
+        position: relative;
+        background-color: var(--bg-primary);
+
+        app-hv-mainstage-screen-share {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+    }
+
+    .presentation-sidebar {
+        flex: 1; // 20% width
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background-color: var(--bg-secondary);
+        border-left: 2px solid var(--border-color);
+        animation: slideInRight 0.4s ease-out 0.1s both;
+
+        app-hv-mainstage-speaker {
+            width: 100%;
+            height: 100%;
+            display: block;
+
+            // Ensure video fills the sidebar
+            ::ng-deep .video-tile-container {
+                width: 100% !important;
+                height: 100% !important;
+                display: flex !important;
+                align-items: center;
+                justify-content: center;
+
+                video {
+                    width: 100% !important;
+                    height: 100% !important;
+                    object-fit: cover !important;
+                    border-radius: 0;
+                }
+
+                .video-placeholder {
+                    width: 100% !important;
+                    height: 100% !important;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    background-color: var(--bg-tertiary);
+                }
+            }
+        }
+    }
+}
+
 // ========== SCREEN AND SPEAKER LAYOUT ==========
 .screen-speaker-layout {
     display: flex;

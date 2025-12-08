@@ -98,6 +98,9 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     readonly OVERLAY_IMAGE_URL = 'https://assets.daily.co/assets/daily-logo-light.png';
     readonly OVERLAY_TEXT = 'Live from Daily Angular';
     
+    // Active speaker tracking for presentation layout
+    activeSpeakerId: string | null = null;
+    
     // Volume reapplication event listener
     private volumeReapplicationListener: (event: any) => void;
 
@@ -186,7 +189,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
 
         try {
             this.layouts = [VideoLayout.TILED,
-            VideoLayout.PINNED_VERTICAL, VideoLayout.PINNED_HORIZONTAL, VideoLayout.FULL_SCREEN];
+            VideoLayout.PINNED_VERTICAL, VideoLayout.PINNED_HORIZONTAL, VideoLayout.FULL_SCREEN, VideoLayout.PRESENTATION];
             this.callObject = DailyIframe.getCallInstance();
             if (!this.callObject) {
                 this.callObject = DailyIframe.createCallObject({
@@ -210,7 +213,8 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 .on("app-message", this.handleAppMessage)
                 .on("live-streaming-started", this.handleLiveStreamingStarted)
                 .on("live-streaming-stopped", this.handleLiveStreamingStopped)
-                .on("live-streaming-error", this.handleLiveStreamingError);
+                .on("live-streaming-error", this.handleLiveStreamingError)
+                .on("active-speaker-change", this.handleActiveSpeakerChange);
 
             await this.callObject.join({
                 userName: this.userName,
@@ -280,7 +284,8 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             .off("app-message", this.handleAppMessage)
             .off("live-streaming-started", this.handleLiveStreamingStarted)
             .off("live-streaming-stopped", this.handleLiveStreamingStopped)
-            .off("live-streaming-error", this.handleLiveStreamingError);
+            .off("live-streaming-error", this.handleLiveStreamingError)
+            .off("active-speaker-change", this.handleActiveSpeakerChange);
     }
 
     handleAppMessage = (e: any): void => {
@@ -297,6 +302,8 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             console.log(`Received layout change from ${e.fromId}: ${e.data.layout}`);
             this.selectedLayout = e.data.layout;
             this.reCalculateLayoutData();
+            // Force UI update to reflect layout change
+            this.cdr.detectChanges();
         }
         
         // NEW: Handle overlay update messages
@@ -1102,6 +1109,9 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             case VideoLayout.FULL_SCREEN:
                 vcsMode = 'dominant';
                 break;
+            case VideoLayout.PRESENTATION:
+                vcsMode = 'dominant';
+                break;
             default:
                 vcsMode = 'grid';
         }
@@ -1122,6 +1132,21 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             } else if (this.selectedLayout === VideoLayout.PINNED_HORIZONTAL) {
                 layout.composition_params['videoSettings.dominant.position'] = 'left';
                 layout.composition_params['videoSettings.dominant.splitPos'] = 0.75;
+            } else if (this.selectedLayout === VideoLayout.PRESENTATION) {
+                // Presentation layout: 80/20 split with screenshare dominant and active speaker in sidebar
+                layout.composition_params['videoSettings.dominant.position'] = 'left';
+                layout.composition_params['videoSettings.dominant.splitPos'] = 0.8;
+                layout.composition_params['videoSettings.maxCamStreams'] = 2;
+                layout.composition_params['videoSettings.dominant.numChiclets'] = 1;
+                layout.composition_params['videoSettings.dominant.followDomFlag'] = false;
+                layout.composition_params['videoSettings.omitAudioOnly'] = true;
+                
+                // Prioritize screenshare and active speaker
+                if (this.screenSharingParticipant && this.activeSpeakerId) {
+                    layout.composition_params['videoSettings.preferredParticipantIds'] = `${this.screenSharingParticipant.id},${this.activeSpeakerId}`;
+                } else if (this.screenSharingParticipant) {
+                    layout.composition_params['videoSettings.preferredParticipantIds'] = this.screenSharingParticipant.id;
+                }
             }
             
             if (this.selectedLayout === VideoLayout.FULL_SCREEN) {
@@ -1130,7 +1155,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 if (this.screenSharingParticipant) {
                     layout.composition_params['videoSettings.preferredParticipantIds'] = this.screenSharingParticipant.id;
                 }
-            } else {
+            } else if (this.selectedLayout !== VideoLayout.PRESENTATION) {
                 layout.composition_params['videoSettings.dominant.numChiclets'] = Math.min(5, stageParticipantIds.length);
                 layout.composition_params['videoSettings.dominant.followDomFlag'] = false;
                 layout.composition_params['videoSettings.dominant.itemInterval_gu'] = 0.2;
@@ -1248,6 +1273,9 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             case VideoLayout.FULL_SCREEN:
                 vcsMode = 'dominant';
                 break;
+            case VideoLayout.PRESENTATION:
+                vcsMode = 'dominant';
+                break;
             default:
                 vcsMode = 'grid';
         }
@@ -1268,6 +1296,21 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             } else if (this.selectedLayout === VideoLayout.PINNED_HORIZONTAL) {
                 layout.composition_params['videoSettings.dominant.position'] = 'left';
                 layout.composition_params['videoSettings.dominant.splitPos'] = 0.75;
+            } else if (this.selectedLayout === VideoLayout.PRESENTATION) {
+                // Presentation layout: 80/20 split with screenshare dominant and active speaker in sidebar
+                layout.composition_params['videoSettings.dominant.position'] = 'left';
+                layout.composition_params['videoSettings.dominant.splitPos'] = 0.8;
+                layout.composition_params['videoSettings.maxCamStreams'] = 2;
+                layout.composition_params['videoSettings.dominant.numChiclets'] = 1;
+                layout.composition_params['videoSettings.dominant.followDomFlag'] = false;
+                layout.composition_params['videoSettings.omitAudioOnly'] = true;
+                
+                // Prioritize screenshare and active speaker
+                if (this.screenSharingParticipant && this.activeSpeakerId) {
+                    layout.composition_params['videoSettings.preferredParticipantIds'] = `${this.screenSharingParticipant.id},${this.activeSpeakerId}`;
+                } else if (this.screenSharingParticipant) {
+                    layout.composition_params['videoSettings.preferredParticipantIds'] = this.screenSharingParticipant.id;
+                }
             }
             
             if (this.selectedLayout === VideoLayout.FULL_SCREEN) {
@@ -1276,7 +1319,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 if (this.screenSharingParticipant) {
                     layout.composition_params['videoSettings.preferredParticipantIds'] = this.screenSharingParticipant.id;
                 }
-            } else {
+            } else if (this.selectedLayout !== VideoLayout.PRESENTATION) {
                 layout.composition_params['videoSettings.dominant.numChiclets'] = Math.min(5, stageParticipantIds.length);
                 layout.composition_params['videoSettings.dominant.followDomFlag'] = false;
                 layout.composition_params['videoSettings.dominant.itemInterval_gu'] = 0.2;
@@ -1339,6 +1382,41 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             console.warn('Could not get current user session ID:', error);
             return null;
         }
+    }
+
+    // Handle active speaker changes
+    handleActiveSpeakerChange = (event: any): void => {
+        if (event && event.activeSpeaker && event.activeSpeaker.peerId) {
+            this.activeSpeakerId = event.activeSpeaker.peerId;
+            console.log('Active speaker changed to:', this.activeSpeakerId);
+            
+            // Trigger change detection for presentation layout
+            if (this.selectedLayout === VideoLayout.PRESENTATION) {
+                this.cdr.detectChanges();
+            }
+        } else {
+            this.activeSpeakerId = null;
+        }
+    };
+
+    // Get participant for presentation sidebar (active speaker)
+    getPresentationSidebarParticipant(): Participant[] {
+        // Step 1 & 2: Look for active speaker who is on stage
+        if (this.activeSpeakerId) {
+            const activeSpeaker = this.participants[this.activeSpeakerId];
+            if (activeSpeaker && activeSpeaker.role === 'stage') {
+                return [activeSpeaker];
+            }
+        }
+        
+        // Step 3: Fallback - find first stage participant who is not screen sharing
+        const stageParticipants = this.getStageParticipants();
+        const nonScreenSharingParticipant = stageParticipants.find(p => 
+            p.id !== this.screenSharingParticipant?.id
+        );
+        
+        // Step 4: Return participant or empty array
+        return nonScreenSharingParticipant ? [nonScreenSharingParticipant] : [];
     }
 
     updateScreenSharingParticipant(): void {
@@ -1703,6 +1781,13 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         this.selectedLayout = layout;
         this.showLayoutMenu = false;
 
+        // Broadcast layout change to all participants
+        this.callObject.sendAppMessage({
+            type: 'LAYOUT_CHANGE',
+            layout: layout
+        });
+        console.log('📡 Broadcasted layout change to all participants:', layout);
+
         // Update live stream layout if currently streaming
         this.updateLiveStreamLayout();
 
@@ -1711,8 +1796,8 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     }
 
     isLayoutDisabled(layout: VideoLayout): boolean {
-        // When screen sharing is inactive, layouts 2,3,4 should be disabled
-        if (!this.isScreenSharing && (layout === VideoLayout.PINNED_VERTICAL || layout === VideoLayout.PINNED_HORIZONTAL || layout === VideoLayout.FULL_SCREEN)) {
+        // When screen sharing is inactive, layouts 2,3,4,5 should be disabled
+        if (!this.isScreenSharing && (layout === VideoLayout.PINNED_VERTICAL || layout === VideoLayout.PINNED_HORIZONTAL || layout === VideoLayout.FULL_SCREEN || layout === VideoLayout.PRESENTATION)) {
             return true;
         }
         // When screen sharing is active, layout 1 (TILED) should be disabled

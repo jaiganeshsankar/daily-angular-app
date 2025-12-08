@@ -121,6 +121,7 @@
                                             [userName]="participant.userName" [local]="false"
                                             [videoTrack]="participant.videoTrack" [audioTrack]="participant.audioTrack"
                                             [role]="participant.role" [isScreenSharing]="isScreenSharing"
+                                            [hideControls]="true"
                                             (roleChangeClick)="toggleParticipantRole(participant)"></app-hv-mainstage-speaker>
                                     </div>
                                 </ng-container>
@@ -166,6 +167,7 @@
                                                 [local]="false" [videoTrack]="participant.videoTrack"
                                                 [audioTrack]="participant.audioTrack" [role]="participant.role"
                                                 [isScreenSharing]="isScreenSharing"
+                                                [hideControls]="true"
                                                 (roleChangeClick)="toggleParticipantRole(participant)"></app-hv-mainstage-speaker>
                                         </div>
                                     </div>
@@ -211,6 +213,7 @@
                                                 [audioReady]="participant.audioReady" [userName]="participant.userName"
                                                 [local]="false" [videoTrack]="participant.videoTrack"
                                                 [audioTrack]="participant.audioTrack" [role]="participant.role"
+                                                [hideControls]="true"
                                                 (roleChangeClick)="toggleParticipantRole(participant)"></app-hv-mainstage-speaker>
                                         </div>
                                     </div>
@@ -235,6 +238,51 @@
                                 </app-hv-mainstage-screen-share>
                             </div>
                         </div>
+                        <ng-container
+                            *ngFor="let participant of getStageParticipants(); trackBy: trackByPeerId; let i = index">
+                            <app-audio-track [joined]="joined" [audioReady]="participant.audioReady"
+                                [local]="participant.local" [audioTrack]="participant.audioTrack"
+                                [role]="participant.role"></app-audio-track>
+                        </ng-container>
+                    </ng-container>
+                    
+                    <!-- ========== PRESENTATION LAYOUT (80/20 SPLIT) ========== -->
+                    <ng-container *ngIf="selectedLayout === VideoLayout.PRESENTATION">
+                        <div class="presentation-layout">
+                            <div class="presentation-main">
+                                <app-hv-mainstage-screen-share 
+                                    *ngIf="isScreenSharing && screenSharingParticipant"
+                                    [screenShareView]="isScreenSharing"
+                                    [screenVideoReady]="screenSharingParticipant.screenVideoReady"
+                                    [screenAudioReady]="screenSharingParticipant.screenAudioReady"
+                                    [userName]="screenSharingParticipant.userName"
+                                    [local]="screenSharingParticipant.local"
+                                    [screenVideoTrack]="screenSharingParticipant.screenVideoTrack"
+                                    [screenAudioTrack]="screenSharingParticipant.screenAudioTrack"
+                                    [role]="screenSharingParticipant.role"
+                                    [screenSharingParticipant]="screenSharingParticipant">
+                                </app-hv-mainstage-screen-share>
+                            </div>
+                            
+                            <div class="presentation-sidebar">
+                                <app-hv-mainstage-speaker 
+                                    *ngFor="let participant of getPresentationSidebarParticipant(); trackBy: trackByPeerId"
+                                    [joined]="joined"
+                                    [videoReady]="participant.videoReady"
+                                    [audioReady]="participant.audioReady" 
+                                    [userName]="participant.userName"
+                                    [local]="participant.local" 
+                                    [videoTrack]="participant.videoTrack"
+                                    [audioTrack]="participant.audioTrack" 
+                                    [role]="participant.role"
+                                    [isScreenSharing]="isScreenSharing"
+                                    [hideControls]="true"
+                                    (roleChangeClick)="toggleParticipantRole(participant)">
+                                </app-hv-mainstage-speaker>
+                            </div>
+                        </div>
+                        
+                        <!-- Audio tracks for all stage participants -->
                         <ng-container
                             *ngFor="let participant of getStageParticipants(); trackBy: trackByPeerId; let i = index">
                             <app-audio-track [joined]="joined" [audioReady]="participant.audioReady"
@@ -376,6 +424,7 @@
                     [audioTrack]="participant.audioTrack" [screenVideoTrack]="participant.screenVideoTrack"
                     [screenAudioTrack]="participant.screenAudioTrack" [isScreenSharing]="isScreenSharing"
                     [role]="participant.role" (roleChangeClick)="toggleParticipantRole(participant)"
+                    [hideControls]="true"
                     [screenSharingParticipant]="screenSharingParticipant"></video-tile>
 
                 <div *ngIf="getBackstageParticipants().length === 0" class="empty-state items-center">

@@ -24,7 +24,7 @@
 		<div class="truncate capitalize mx-auto text-sm flex">
 			<span class="truncate">{{userName}}</span>
 		</div>
-		<div *ngIf="local && joined" id="controls" class="controls">
+		<div *ngIf="local && joined && !hideControls" id="controls" class="controls">
 			<button class="media-control rounded" title="{{ videoReady ? 'Turn video off' : 'Turn video on' }}"
 				(click)="handleToggleVideoClick()">
 				<img *ngIf="!videoReady" src="../../assets/vid_off.svg" alt="Turn video on" />

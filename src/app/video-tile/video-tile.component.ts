@@ -28,6 +28,7 @@ export class VideoTileComponent {
   @Input() screenShareView: boolean = false;
   @Input() role: 'backstage' | 'stage';
   @Input() screenSharingParticipant: any = null; // **NEW INPUT**
+  @Input() hideControls: boolean = false;
 
   videoStream: MediaStream | undefined;
   audioStream: MediaStream | undefined;

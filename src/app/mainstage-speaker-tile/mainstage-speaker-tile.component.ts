@@ -19,6 +19,7 @@ export class MainstageSpeakerTileComponent implements OnInit, OnDestroy, OnChang
 	@Input() screenAudioTrack: MediaStreamTrack | undefined;
 	@Input() role: 'backstage' | 'stage';
 	@Input() isScreenSharing: boolean;
+	@Input() hideControls: boolean = false;
 
 	videoStream: MediaStream | undefined;
 	audioStream: MediaStream | undefined;
