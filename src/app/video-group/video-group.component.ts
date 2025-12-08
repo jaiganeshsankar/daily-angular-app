@@ -92,8 +92,8 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     isBackstageMuted: boolean = false;
     
     // NEW: Overlay state variables
-    showTextOverlay: boolean = false;
-    showImageOverlay: boolean = false;
+    showTextOverlay: boolean = true;
+    showImageOverlay: boolean = true;
     recordingEnabled: boolean = true;
     readonly OVERLAY_IMAGE_URL = 'https://assets.daily.co/assets/daily-logo-light.png';
     readonly OVERLAY_TEXT = 'Live from Daily Angular';
@@ -219,8 +219,16 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             await this.callObject.join({
                 userName: this.userName,
                 url: this.dailyRoomUrl,
-                token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyIjoiQmk0dEFPWTJGRUs1Z2k1bllLbWUiLCJvIjp0cnVlLCJzcyI6dHJ1ZSwiZCI6Ijg3YmEzM2JiLWQ3YjAtNDA5OC1iMGVmLWNkYWFjMDg1MTc2MCIsImlhdCI6MTc2MTY2ODI3MX0.caecSEIZwos2YZV0NbHI2NoeN-IVCgdbAuju2bWTmKg'
+                token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyIjoiQmk0dEFPWTJGRUs1Z2k1bllLbWUiLCJvIjp0cnVlLCJzcyI6dHJ1ZSwiZCI6Ijg3YmEzM2JiLWQ3YjAtNDA5OC1iMGVmLWNkYWFjMDg1MTc2MCIsImlhdCI6MTc2MTY2ODI3MX0.caecSEIZwos2YZV0NbHI2NoeN-IVCgdbAuju2bWTmKg',
+                startAudioOff: false,
+                startVideoOff: false
             });
+            
+            // Disable local audio monitoring to prevent hearing yourself
+            if (this.callObject.localAudio()) {
+                console.log('🔇 Disabling local audio monitoring to prevent self-hearing');
+                // Daily.js doesn't route local audio to outputs by default, but let's ensure it
+            }
         } catch (error: any) {
             console.error("Failed to initialize Daily call:", error);
             this.error = `Failed to join call: ${error.message || 'Please check your internet connection and try again.'}`;
@@ -378,9 +386,30 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
 
     addParticipant(participant: DailyParticipant) {
         const p = this.formatParticipantObj(participant);
+        console.log('➕ Adding participant:', {
+            id: p.id,
+            local: p.local,
+            audioTrack: !!p.audioTrack,
+            audioReady: p.audioReady,
+            userName: p.userName,
+            dailyLocal: participant.local  // Compare with Daily.js local property
+        });
+        
         this.participants[participant.session_id] = p;
         this.participantRoles[participant.session_id] = p.role;
         this.updateAudioSubscriptions();
+
+        // Prevent local audio feedback - ensure local participant audio is never played
+        if (p.local) {
+            console.log('🔇 Local participant - audio should NOT play through HTML elements');
+            
+            // Double-check that audio won't play for local participant
+            if (p.audioTrack) {
+                console.warn('⚠️ Local participant has audio track - this should not cause playback');
+            }
+        } else {
+            console.log('🔊 Remote participant - audio will play through HTML elements');
+        }
 
         // NEW: Apply volume controls to new remote participants
         if (!p.local) {
@@ -600,6 +629,10 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         }
 
         this.updateAudioSubscriptions();
+        
+        // Note: Active speaker tracking should be handled by Daily.js active-speaker-change events
+        // Don't manually set activeSpeakerId here as it can interfere with proper event handling
+        
         console.log('Recalculating layout due to participant update', this.getStageParticipants().length);
         if (this.getStageParticipants().length > 0) {
             this.reCalculateLayoutData();
@@ -1107,7 +1140,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 vcsMode = 'dominant';
                 break;
             case VideoLayout.FULL_SCREEN:
-                vcsMode = 'dominant';
+                vcsMode = 'single';
                 break;
             case VideoLayout.PRESENTATION:
                 vcsMode = 'dominant';
@@ -1120,42 +1153,97 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         layout.composition_params.mode = vcsMode;
 
         // Add mode-specific VCS parameters
-        if (vcsMode === 'dominant') {
+        if (vcsMode === 'single') {
+            // Full Screen layout - single mode for screenshare only
+            layout.composition_params['videoSettings.preferScreenshare'] = true;
+            layout.composition_params['videoSettings.maxCamStreams'] = 1;
+            layout.composition_params['videoSettings.omitAudioOnly'] = true;
+            layout.composition_params['videoSettings.showParticipantLabels'] = true;
+            if (this.screenSharingParticipant) {
+                // Override participants to show only screenshare
+                layout.participants.video = [{ session_id: this.screenSharingParticipant.id, trackName: 'screenVideo' }];
+            }
+        } else if (vcsMode === 'dominant') {
             layout.composition_params['videoSettings.preferScreenshare'] = true;
             layout.composition_params['videoSettings.maxCamStreams'] = stageParticipantIds.length;
             layout.composition_params['videoSettings.scaleMode'] = 'fit';
-            layout.composition_params['videoSettings.showParticipantLabels'] = false;
+            layout.composition_params['videoSettings.showParticipantLabels'] = true;
             
             if (this.selectedLayout === VideoLayout.PINNED_VERTICAL) {
+                // Screen share with thumbnails at bottom (properly centered)
                 layout.composition_params['videoSettings.dominant.position'] = 'top';
                 layout.composition_params['videoSettings.dominant.splitPos'] = 0.7;
+                layout.composition_params['videoSettings.dominant.numChiclets'] = Math.min(5, stageParticipantIds.length);
+                layout.composition_params['videoSettings.dominant.followDomFlag'] = false;
+                layout.composition_params['videoSettings.dominant.itemInterval_gu'] = 0.2;
+                layout.composition_params['videoSettings.dominant.outerPadding_gu'] = 0.2;
+                layout.composition_params['videoSettings.dominant.splitMargin_gu'] = 0;
+                layout.composition_params['videoSettings.showParticipantLabels'] = false;
             } else if (this.selectedLayout === VideoLayout.PINNED_HORIZONTAL) {
+                // Screen share with thumbnails on right (properly configured)
                 layout.composition_params['videoSettings.dominant.position'] = 'left';
                 layout.composition_params['videoSettings.dominant.splitPos'] = 0.75;
-            } else if (this.selectedLayout === VideoLayout.PRESENTATION) {
-                // Presentation layout: 80/20 split with screenshare dominant and active speaker in sidebar
-                layout.composition_params['videoSettings.dominant.position'] = 'left';
-                layout.composition_params['videoSettings.dominant.splitPos'] = 0.8;
-                layout.composition_params['videoSettings.maxCamStreams'] = 2;
-                layout.composition_params['videoSettings.dominant.numChiclets'] = 1;
+                layout.composition_params['videoSettings.dominant.numChiclets'] = Math.min(5, stageParticipantIds.length);
                 layout.composition_params['videoSettings.dominant.followDomFlag'] = false;
+                layout.composition_params['videoSettings.dominant.itemInterval_gu'] = 0.2;
+                layout.composition_params['videoSettings.dominant.outerPadding_gu'] = 0.2;
+                layout.composition_params['videoSettings.dominant.splitMargin_gu'] = 0;
+                layout.composition_params['videoSettings.showParticipantLabels'] = false;
+            } else if (this.selectedLayout === VideoLayout.PRESENTATION) {
+                // Presentation layout: 80/20 split with screenshare dominant, active speaker in right sidebar
+                layout.composition_params['mode'] = 'dominant';
+                layout.composition_params['videoSettings.dominant.position'] = 'left'; // Screenshare on left (80%)
+                layout.composition_params['videoSettings.dominant.splitPos'] = 0.8; // 80/20 split
+                layout.composition_params['videoSettings.maxCamStreams'] = 1; // Only one tile in sidebar
                 layout.composition_params['videoSettings.omitAudioOnly'] = true;
+                layout.composition_params['videoSettings.showParticipantLabels'] = true; // Show names for tracking
                 
-                // Prioritize screenshare and active speaker
-                if (this.screenSharingParticipant && this.activeSpeakerId) {
-                    layout.composition_params['videoSettings.preferredParticipantIds'] = `${this.screenSharingParticipant.id},${this.activeSpeakerId}`;
-                } else if (this.screenSharingParticipant) {
-                    layout.composition_params['videoSettings.preferredParticipantIds'] = this.screenSharingParticipant.id;
+                // Explicit video tracks configuration
+                const videoTracks = [];
+                
+                // 1. Add screenshare track (dominant/main area) - ALWAYS first priority
+                if (this.screenSharingParticipant?.screenVideoTrack) {
+                    videoTracks.push({ session_id: this.screenSharingParticipant.id, trackName: 'screenVideo' });
+                    console.log('📡 Added screenshare track for main area:', this.screenSharingParticipant.userName);
                 }
+                
+                // 2. Add active speaker track (sidebar) - NEVER the same person as screen sharer
+                let sidebarParticipant = null;
+                
+                // Priority 1: Use active speaker if they exist, are on stage, AND are NOT the screen sharer
+                if (this.activeSpeakerId) {
+                    const activeSpeaker = this.participants[this.activeSpeakerId];
+                    if (activeSpeaker && activeSpeaker.role === 'stage' && activeSpeaker.id !== this.screenSharingParticipant?.id) {
+                        sidebarParticipant = activeSpeaker;
+                        console.log('📡 Using active speaker for presentation sidebar:', activeSpeaker.userName);
+                    }
+                }
+                
+                // Priority 2: If no valid active speaker, find any other stage participant (NOT the screen sharer)
+                if (!sidebarParticipant) {
+                    const stageParticipants = Object.values(this.participants).filter(p => 
+                        p.role === 'stage' && p.id !== this.screenSharingParticipant?.id
+                    );
+                    sidebarParticipant = stageParticipants[0] || null;
+                    if (sidebarParticipant) {
+                        console.log('📡 Using fallback stage participant for presentation sidebar:', sidebarParticipant.userName);
+                    }
+                }
+                
+                // Add sidebar participant (camera track only)
+                if (sidebarParticipant) {
+                    videoTracks.push({ session_id: sidebarParticipant.id, trackName: 'video' });
+                }
+                
+                // Override participants.video with explicit tracks
+                layout.participants.video = videoTracks;
+                // Keep all stage participants for audio
+                layout.participants.audio = stageParticipantIds;
+                
+                console.log('📡 Presentation layout video tracks:', videoTracks);
             }
             
-            if (this.selectedLayout === VideoLayout.FULL_SCREEN) {
-                layout.composition_params['videoSettings.maxCamStreams'] = 1;
-                layout.composition_params['videoSettings.omitAudioOnly'] = true;
-                if (this.screenSharingParticipant) {
-                    layout.composition_params['videoSettings.preferredParticipantIds'] = this.screenSharingParticipant.id;
-                }
-            } else if (this.selectedLayout !== VideoLayout.PRESENTATION) {
+            if (this.selectedLayout !== VideoLayout.PRESENTATION) {
                 layout.composition_params['videoSettings.dominant.numChiclets'] = Math.min(5, stageParticipantIds.length);
                 layout.composition_params['videoSettings.dominant.followDomFlag'] = false;
                 layout.composition_params['videoSettings.dominant.itemInterval_gu'] = 0.2;
@@ -1163,7 +1251,8 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 layout.composition_params['videoSettings.dominant.splitMargin_gu'] = 0;
             }
         } else {
-            layout.composition_params['videoSettings.showParticipantLabels'] = false;
+            // Grid mode settings
+            layout.composition_params['videoSettings.showParticipantLabels'] = true;
         }
 
         console.log('🎥 Final VCS layout config with overlays:', {
@@ -1187,7 +1276,9 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         return layout;
     }
 
-    // NEW: Get layout options for updates (excludes composition_id and session_assets)
+
+
+    // Simplified layout options for updates (no composition_id or session_assets needed)
     private getStreamingLayoutOptionsForUpdate(): any {
         // Filter participants to get stage participant IDs
         const stageParticipantIds = Object.values(this.participants)
@@ -1204,7 +1295,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 participants: { video: [], audio: [] },
                 composition_params: { 
                     'background-color': '#000000',
-                    // Text overlay parameters (correct Daily.co VCS format)
+                    // Text overlay parameters
                     'showTextOverlay': this.showTextOverlay,
                     'text.content': this.OVERLAY_TEXT,
                     'text.align_horizontal': 'right',
@@ -1226,18 +1317,62 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             };
         }
 
-        // Handle non-empty stage scenario with VCS baseline composition
-        console.log('🎭 Stage participants found, using VCS baseline composition for layout update:', this.selectedLayout);
-        
-        // Base layout with participants filter (no composition_id or session_assets for updates)
-        const layout: any = {
+        // Use simplified VCS configuration without complex explicit video tracks
+        let updateMode = 'grid';
+        if (this.selectedLayout === VideoLayout.TILED) {
+            updateMode = 'grid';
+        } else if (this.selectedLayout === VideoLayout.FULL_SCREEN) {
+            updateMode = 'single';
+        } else {
+            updateMode = 'dominant';
+        }
+
+        const updateLayout = {
             preset: 'custom' as const,
             participants: {
                 video: stageParticipantIds,
                 audio: stageParticipantIds
             },
             composition_params: {
-                // Text overlay parameters (correct Daily.co VCS format)
+                mode: updateMode,
+                ...(updateMode !== 'grid' && updateMode !== 'single' && {
+                    'videoSettings.preferScreenshare': true,
+                    'videoSettings.maxCamStreams': this.selectedLayout === VideoLayout.PRESENTATION ? 1 : stageParticipantIds.length,
+                    'videoSettings.scaleMode': 'fit',
+                    'videoSettings.showParticipantLabels': true
+                }),
+                ...(updateMode === 'single' && {
+                    'videoSettings.preferScreenshare': true,
+                    'videoSettings.maxCamStreams': 1,
+                    'videoSettings.omitAudioOnly': true,
+                    'videoSettings.showParticipantLabels': true
+                }),
+                ...(this.selectedLayout === VideoLayout.PRESENTATION && {
+                    'videoSettings.dominant.position': 'left',
+                    'videoSettings.dominant.splitPos': 0.8,
+                    'videoSettings.showParticipantLabels': true
+                }),
+                ...(this.selectedLayout === VideoLayout.PINNED_VERTICAL && {
+                    'videoSettings.dominant.position': 'top',
+                    'videoSettings.dominant.splitPos': 0.7,
+                    'videoSettings.dominant.numChiclets': Math.min(5, stageParticipantIds.length),
+                    'videoSettings.dominant.followDomFlag': false,
+                    'videoSettings.dominant.itemInterval_gu': 0.2,
+                    'videoSettings.dominant.outerPadding_gu': 0.2,
+                    'videoSettings.dominant.splitMargin_gu': 0,
+                    'videoSettings.showParticipantLabels': false
+                }),
+                ...(this.selectedLayout === VideoLayout.PINNED_HORIZONTAL && {
+                    'videoSettings.dominant.position': 'left',
+                    'videoSettings.dominant.splitPos': 0.75,
+                    'videoSettings.dominant.numChiclets': Math.min(5, stageParticipantIds.length),
+                    'videoSettings.dominant.followDomFlag': false,
+                    'videoSettings.dominant.itemInterval_gu': 0.2,
+                    'videoSettings.dominant.outerPadding_gu': 0.2,
+                    'videoSettings.dominant.splitMargin_gu': 0,
+                    'videoSettings.showParticipantLabels': false
+                }),
+                // Text overlay parameters
                 'showTextOverlay': this.showTextOverlay,
                 'text.content': this.OVERLAY_TEXT,
                 'text.align_horizontal': 'right',
@@ -1258,88 +1393,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             }
         };
 
-        // Map selectedLayout to VCS mode and add mode-specific parameters
-        let vcsMode: string;
-        switch (this.selectedLayout) {
-            case VideoLayout.TILED:
-                vcsMode = 'grid';
-                break;
-            case VideoLayout.PINNED_HORIZONTAL:
-                vcsMode = 'dominant';
-                break;
-            case VideoLayout.PINNED_VERTICAL:
-                vcsMode = 'dominant';
-                break;
-            case VideoLayout.FULL_SCREEN:
-                vcsMode = 'dominant';
-                break;
-            case VideoLayout.PRESENTATION:
-                vcsMode = 'dominant';
-                break;
-            default:
-                vcsMode = 'grid';
-        }
-        
-        // Add the VCS mode to composition params
-        layout.composition_params.mode = vcsMode;
-
-        // Add mode-specific VCS parameters
-        if (vcsMode === 'dominant') {
-            layout.composition_params['videoSettings.preferScreenshare'] = true;
-            layout.composition_params['videoSettings.maxCamStreams'] = stageParticipantIds.length;
-            layout.composition_params['videoSettings.scaleMode'] = 'fit';
-            layout.composition_params['videoSettings.showParticipantLabels'] = false;
-            
-            if (this.selectedLayout === VideoLayout.PINNED_VERTICAL) {
-                layout.composition_params['videoSettings.dominant.position'] = 'top';
-                layout.composition_params['videoSettings.dominant.splitPos'] = 0.7;
-            } else if (this.selectedLayout === VideoLayout.PINNED_HORIZONTAL) {
-                layout.composition_params['videoSettings.dominant.position'] = 'left';
-                layout.composition_params['videoSettings.dominant.splitPos'] = 0.75;
-            } else if (this.selectedLayout === VideoLayout.PRESENTATION) {
-                // Presentation layout: 80/20 split with screenshare dominant and active speaker in sidebar
-                layout.composition_params['videoSettings.dominant.position'] = 'left';
-                layout.composition_params['videoSettings.dominant.splitPos'] = 0.8;
-                layout.composition_params['videoSettings.maxCamStreams'] = 2;
-                layout.composition_params['videoSettings.dominant.numChiclets'] = 1;
-                layout.composition_params['videoSettings.dominant.followDomFlag'] = false;
-                layout.composition_params['videoSettings.omitAudioOnly'] = true;
-                
-                // Prioritize screenshare and active speaker
-                if (this.screenSharingParticipant && this.activeSpeakerId) {
-                    layout.composition_params['videoSettings.preferredParticipantIds'] = `${this.screenSharingParticipant.id},${this.activeSpeakerId}`;
-                } else if (this.screenSharingParticipant) {
-                    layout.composition_params['videoSettings.preferredParticipantIds'] = this.screenSharingParticipant.id;
-                }
-            }
-            
-            if (this.selectedLayout === VideoLayout.FULL_SCREEN) {
-                layout.composition_params['videoSettings.maxCamStreams'] = 1;
-                layout.composition_params['videoSettings.omitAudioOnly'] = true;
-                if (this.screenSharingParticipant) {
-                    layout.composition_params['videoSettings.preferredParticipantIds'] = this.screenSharingParticipant.id;
-                }
-            } else if (this.selectedLayout !== VideoLayout.PRESENTATION) {
-                layout.composition_params['videoSettings.dominant.numChiclets'] = Math.min(5, stageParticipantIds.length);
-                layout.composition_params['videoSettings.dominant.followDomFlag'] = false;
-                layout.composition_params['videoSettings.dominant.itemInterval_gu'] = 0.2;
-                layout.composition_params['videoSettings.dominant.outerPadding_gu'] = 0.2;
-                layout.composition_params['videoSettings.dominant.splitMargin_gu'] = 0;
-            }
-        } else {
-            layout.composition_params['videoSettings.showParticipantLabels'] = false;
-        }
-
-        console.log('🎥 Final VCS layout update config with overlays:', {
-            preset: layout.preset,
-            mode: vcsMode,
-            participantCount: stageParticipantIds.length,
-            screenSharing: !!this.screenSharingParticipant,
-            textOverlay: this.showTextOverlay,
-            imageOverlay: this.showImageOverlay
-        });
-        
-        return layout;
+        return updateLayout;
     }
 
     // Live streaming event handlers
@@ -1386,37 +1440,59 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
 
     // Handle active speaker changes
     handleActiveSpeakerChange = (event: any): void => {
+        console.log('🎤 Active speaker change event:', event);
+        
+        // Daily.js provides activeSpeaker.peerId for the active speaker
+        let newActiveSpeakerId: string | null = null;
+        
         if (event && event.activeSpeaker && event.activeSpeaker.peerId) {
-            this.activeSpeakerId = event.activeSpeaker.peerId;
-            console.log('Active speaker changed to:', this.activeSpeakerId);
+            newActiveSpeakerId = event.activeSpeaker.peerId;
+        }
+        
+        // Only update if the active speaker actually changed
+        if (this.activeSpeakerId !== newActiveSpeakerId) {
+            console.log(`🎤 Active speaker changed from ${this.activeSpeakerId} to ${newActiveSpeakerId}`);
+            this.activeSpeakerId = newActiveSpeakerId;
             
             // Trigger change detection for presentation layout
             if (this.selectedLayout === VideoLayout.PRESENTATION) {
+                console.log('🔄 Updating presentation layout due to active speaker change');
                 this.cdr.detectChanges();
+                // Update live stream layout for instant speaker switching
+                this.updateLiveStreamLayout();
             }
-        } else {
-            this.activeSpeakerId = null;
         }
     };
 
-    // Get participant for presentation sidebar (active speaker)
+    // Get participant for presentation sidebar (active speaker with screen sharer fallback)
     getPresentationSidebarParticipant(): Participant[] {
-        // Step 1 & 2: Look for active speaker who is on stage
+        // Priority 1: Use active speaker if they exist and are on stage
         if (this.activeSpeakerId) {
             const activeSpeaker = this.participants[this.activeSpeakerId];
             if (activeSpeaker && activeSpeaker.role === 'stage') {
+                console.log('🎯 Presentation sidebar: Using active speaker', activeSpeaker.userName);
                 return [activeSpeaker];
             }
         }
         
-        // Step 3: Fallback - find first stage participant who is not screen sharing
+        // Priority 2: Use screen sharer as fallback (they were likely speaking when they started sharing)
+        if (this.screenSharingParticipant && this.screenSharingParticipant.role === 'stage') {
+            console.log('🎯 Presentation sidebar: Using screen sharer as fallback', this.screenSharingParticipant.userName);
+            return [this.screenSharingParticipant];
+        }
+        
+        // Priority 3: Any other stage participant
         const stageParticipants = this.getStageParticipants();
-        const nonScreenSharingParticipant = stageParticipants.find(p => 
+        const fallbackParticipant = stageParticipants.find(p => 
             p.id !== this.screenSharingParticipant?.id
         );
         
-        // Step 4: Return participant or empty array
-        return nonScreenSharingParticipant ? [nonScreenSharingParticipant] : [];
+        if (fallbackParticipant) {
+            console.log('🎯 Presentation sidebar: Using fallback stage participant', fallbackParticipant.userName);
+            return [fallbackParticipant];
+        }
+        
+        return [];
     }
 
     updateScreenSharingParticipant(): void {

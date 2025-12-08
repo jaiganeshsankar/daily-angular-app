@@ -105,6 +105,12 @@ export class VideoTileComponent {
 
   addAudioStream(track: MediaStreamTrack) {
     this.audioStream = new MediaStream([track]);
+    console.log('🎵 Audio stream created for participant:', {
+      userName: this.userName,
+      local: this.local,
+      trackId: track.id,
+      willPlay: !this.local  // Should only play if not local
+    });
   }
 
   addScreenVideoStream(track: MediaStreamTrack) {

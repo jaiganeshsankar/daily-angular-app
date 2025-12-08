@@ -84,6 +84,12 @@ export class MainstageSpeakerTileComponent implements OnInit, OnDestroy, OnChang
 
 	addAudioStream(track: MediaStreamTrack) {
 		this.audioStream = new MediaStream([track]);
+		console.log('🎵 Mainstage audio stream created for participant:', {
+			userName: this.userName,
+			local: this.local,
+			trackId: track.id,
+			willPlay: !this.local  // Should only play if not local
+		});
 	}
 
 	updateVideoTrack(oldTrack: MediaStreamTrack, track: MediaStreamTrack) {
