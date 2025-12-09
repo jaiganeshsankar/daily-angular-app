@@ -83,7 +83,6 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     private liveStreamSubscription: Subscription;
     private toggleStreamSubscription: Subscription;
     private toggleOverlaySubscription: Subscription;
-    private toggleRecordingSubscription: Subscription;
     private textOverlaySubscription: Subscription;
     private imageOverlaySubscription: Subscription;
     private recordingEnabledSubscription: Subscription;
@@ -95,7 +94,8 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     // NEW: Overlay state variables
     showTextOverlay: boolean = true;
     showImageOverlay: boolean = true;
-    recordingEnabled: boolean = true;
+    recordingEnabled: boolean = false; // Changed to false for safety first
+    showGoLiveMenu: boolean = false;
     readonly OVERLAY_IMAGE_URL = 'https://assets.daily.co/assets/daily-logo-light.png';
     readonly OVERLAY_TEXT = 'Live from Daily Angular';
     
@@ -163,13 +163,8 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             this.handleOverlayToggle(type);
         });
         
-        // Subscribe to toggle recording events
-        console.log('🎥 VideoGroupComponent: Setting up toggle recording subscription...');
-        this.toggleRecordingSubscription = this.liveStreamService.toggleRecording$.subscribe(() => {
-            console.log('🎥 VideoGroupComponent: Received toggle recording event');
-            this.handleRecordingToggle();
-        });
-        console.log('🎥 VideoGroupComponent: Toggle recording subscription setup complete');
+        // Recording toggle functionality is now handled through the Go Live dropdown
+        // No need for separate recording toggle subscription
 
         // Subscribe to overlay state changes
         this.textOverlaySubscription = this.liveStreamService.textOverlayState$.subscribe(visible => {
@@ -189,6 +184,16 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             console.log('🎥 Previous local state:', this.recordingEnabled);
             this.recordingEnabled = enabled;
             console.log('🎥 Updated local state to:', this.recordingEnabled);
+            
+            // Broadcast recording setting to all participants when it changes
+            if (this.callObject && this.joined) {
+                this.callObject.sendAppMessage({
+                    type: 'RECORDING_SETTING',
+                    enabled: enabled
+                }, '*');
+                console.log('📡 Broadcasting recording setting to all participants:', enabled);
+            }
+            
             this.cdr.markForCheck(); // Mark for check first
             this.cdr.detectChanges(); // Then trigger detection
             console.log('🎥 Change detection triggered from subscription');
@@ -272,9 +277,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         if (this.toggleOverlaySubscription) {
             this.toggleOverlaySubscription.unsubscribe();
         }
-        if (this.toggleRecordingSubscription) {
-            this.toggleRecordingSubscription.unsubscribe();
-        }
+        // toggleRecordingSubscription removed - handled through Go Live dropdown
         if (this.textOverlaySubscription) {
             this.textOverlaySubscription.unsubscribe();
         }
@@ -343,6 +346,14 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             }
             this.updateLiveStreamLayout();
             // Force change detection to update UI
+            this.cdr.detectChanges();
+        }
+        
+        // Handle RECORDING_SETTING messages for Go Live dropdown selection
+        if (e.data.type === 'RECORDING_SETTING' && typeof e.data.enabled === 'boolean') {
+            console.log(`📡 Received recording setting from ${e.fromId}: ${e.data.enabled}`);
+            this.recordingEnabled = e.data.enabled;
+            this.liveStreamService.setRecordingEnabled(e.data.enabled);
             this.cdr.detectChanges();
         }
         
@@ -959,6 +970,8 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         }
     }
 
+    // Method removed - recording setting is now controlled by the dropdown arrow in app component
+
     toggleLiveStream(): void {
         console.log('🎬 toggleLiveStream called', { 
             joined: this.joined, 
@@ -978,7 +991,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 this.endLiveStream();
             } else {
                 console.log('▶️ Attempting to start live stream...');
-                // Start live stream - don't set state here, let the event handler do it
+                // Start live stream using current recording setting
                 this.startLiveStream();
             }
         } catch (error) {
@@ -1767,40 +1780,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         }
     }
 
-    // NEW: Handle recording toggle from service (like live stream toggle)
-    private handleRecordingToggle(): void {
-        console.log('🎥 VideoGroupComponent: handleRecordingToggle called');
-        console.log('🎥 Current state - joined:', this.joined, 'callObject:', !!this.callObject);
-        
-        if (!this.joined || !this.callObject) {
-            console.warn('Cannot toggle recording: not joined or no call object');
-            return;
-        }
-        
-        console.log('🎥 Previous recording state:', this.recordingEnabled);
-        
-        // Toggle local state
-        this.recordingEnabled = !this.recordingEnabled;
-        
-        console.log('🎥 New recording state:', this.recordingEnabled);
-        
-        // Update service state so all components see the change
-        this.liveStreamService.setRecordingEnabled(this.recordingEnabled);
-        
-        // Broadcast the recording state change to all participants
-        console.log('📡 Broadcasting recording state change to all participants:', this.recordingEnabled);
-        this.callObject.sendAppMessage({
-            type: 'RECORDING_STATE_CHANGE',
-            recordingEnabled: this.recordingEnabled
-        }, '*');
-        
-        console.log(`🎥 Recording toggled to: ${this.recordingEnabled}`);
-        
-        // Force change detection
-        this.cdr.markForCheck(); // Mark for check first
-        this.cdr.detectChanges(); // Then trigger detection
-        console.log('🎥 Change detection triggered');
-    }
+    // Recording toggle functionality is now handled through the Go Live dropdown
 
     async applyVirtualBackground(option: VirtualBackgroundOption): Promise<void> {
         // Prevent applying if already loading or if the same background is selected

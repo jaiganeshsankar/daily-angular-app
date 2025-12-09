@@ -13,7 +13,8 @@ export class AppComponent implements OnInit, OnDestroy {
   isJoined = false;
   showTextOverlay = false;
   showImageOverlay = false;
-  recordingEnabled = true;
+  recordingEnabled = false; // Changed to false for safety first
+  showGoLiveMenu = false;
   private subscriptions: Subscription[] = [];
 
   constructor(private liveStreamService: LiveStreamService) {}
@@ -46,7 +47,24 @@ export class AppComponent implements OnInit, OnDestroy {
     this.subscriptions.forEach(sub => sub.unsubscribe());
   }
 
+  setRecordingSetting(enabled: boolean): void {
+    // Prevent changing recording settings while live
+    if (this.isLive) {
+      console.log('Cannot change recording settings while live');
+      return;
+    }
+    
+    this.recordingEnabled = enabled;
+    this.showGoLiveMenu = false;
+    this.liveStreamService.setRecordingEnabled(enabled);
+    
+    // Broadcast the recording setting to all participants
+    // This will be handled by the video-group component
+    console.log('Recording setting changed to:', enabled);
+  }
+
   toggleLiveStream(): void {
+    // Go Live button works as original - just toggles the live stream
     this.liveStreamService.toggleLiveStream();
     console.log('Live stream toggled:', this.liveStreamService.isLive);
   }
@@ -55,10 +73,5 @@ export class AppComponent implements OnInit, OnDestroy {
     this.liveStreamService.toggleOverlay(type);
   }
 
-  toggleRecording(): void {
-    console.log('🎥 AppComponent: toggleRecording called');
-    console.log('🎥 Current app component recording state:', this.recordingEnabled);
-    this.liveStreamService.toggleRecording();
-    console.log('🎥 Service toggleRecording called from app component');
-  }
+
 }

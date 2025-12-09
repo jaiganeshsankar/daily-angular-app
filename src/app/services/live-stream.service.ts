@@ -11,7 +11,7 @@ export class LiveStreamService {
   private textOverlaySubject = new BehaviorSubject<boolean>(false);
   private imageOverlaySubject = new BehaviorSubject<boolean>(false);
   private toggleOverlaySubject = new Subject<{ type: 'text' | 'image' }>();
-  private recordingEnabledSubject = new BehaviorSubject<boolean>(true); // Default: recording enabled
+  private recordingEnabledSubject = new BehaviorSubject<boolean>(false); // Default: recording disabled for safety
   private toggleRecordingSubject = new Subject<void>();
 
   liveState$ = this.liveStateSubject.asObservable();

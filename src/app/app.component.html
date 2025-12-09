@@ -15,15 +15,56 @@
           [class.active]="showImageOverlay" [title]="showImageOverlay ? 'Hide Image' : 'Show Image'">
           <span>{{ showImageOverlay ? 'Hide Image' : 'Show Image' }}</span>
         </button>
-        <button *ngIf="isJoined" class="recording-btn" (click)="toggleRecording()" 
-          [class.active]="recordingEnabled" [title]="recordingEnabled ? 'Disable Recording' : 'Enable Recording'">
-          <span>{{ recordingEnabled ? '🔴 Recording' : '⭕ No Recording' }}</span>
-        </button>
-        <button *ngIf="isJoined" class="go-live-btn" [class.live]="isLive" (click)="toggleLiveStream()" 
-          [title]="isLive ? 'End Live' : 'Go Live'">
-          <span>{{ isLive ? 'End Live' : 'Go Live' }}</span>
-          <div *ngIf="isLive" class="live-dot"></div>
-        </button>
+
+        <!-- Go Live Split Button -->
+        <div *ngIf="isJoined" class="go-live-container">
+          <!-- Backdrop to close menu when clicking outside -->
+          <div *ngIf="showGoLiveMenu" class="dropdown-backdrop" (click)="showGoLiveMenu = false"></div>
+          
+          <div class="split-button">
+            <!-- Main Go Live Button -->
+            <button class="go-live-btn" [class.live]="isLive" (click)="toggleLiveStream()" 
+              [title]="isLive ? 'End Live' : 'Go Live'">
+              <span>
+                {{ isLive ? 'End Live' : 'Go Live' }}
+              </span>
+              <div *ngIf="isLive" class="live-dot"></div>
+            </button>
+            
+            <!-- Dropdown Arrow Button -->
+            <button class="dropdown-arrow-btn" [class.live]="isLive" (click)="showGoLiveMenu = !showGoLiveMenu" 
+              [title]="'Recording: ' + (recordingEnabled ? 'ON' : 'OFF')">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            </button>
+          </div>
+          
+          <!-- Dropdown Menu -->
+          <div *ngIf="showGoLiveMenu" class="go-live-dropdown">
+            <div *ngIf="isLive" class="dropdown-status">
+              <span class="status-text">Current Stream Settings</span>
+            </div>
+            <button (click)="isLive ? null : setRecordingSetting(false)" 
+                    class="dropdown-option" 
+                    [class.selected]="!recordingEnabled"
+                    [class.disabled]="isLive"
+                    [disabled]="isLive">
+              <span class="option-indicator no-record"></span>
+              <span>Recording OFF</span>
+              <span *ngIf="!recordingEnabled" class="checkmark">✓</span>
+            </button>
+            <button (click)="isLive ? null : setRecordingSetting(true)" 
+                    class="dropdown-option" 
+                    [class.selected]="recordingEnabled"
+                    [class.disabled]="isLive"
+                    [disabled]="isLive">
+              <span class="option-indicator record"></span>
+              <span>Recording ON</span>
+              <span *ngIf="recordingEnabled" class="checkmark">✓</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
