@@ -1238,7 +1238,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 layout.composition_params['videoSettings.dominant.itemInterval_gu'] = 0.2;
                 layout.composition_params['videoSettings.dominant.outerPadding_gu'] = 0.2;
                 layout.composition_params['videoSettings.dominant.splitMargin_gu'] = 0;
-                layout.composition_params['videoSettings.showParticipantLabels'] = false;
+                layout.composition_params['videoSettings.showParticipantLabels'] = true;
             } else if (this.selectedLayout === VideoLayout.PINNED_HORIZONTAL) {
                 // Screen share with thumbnails on right (properly configured)
                 layout.composition_params['videoSettings.dominant.position'] = 'left';
@@ -1248,7 +1248,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 layout.composition_params['videoSettings.dominant.itemInterval_gu'] = 0.2;
                 layout.composition_params['videoSettings.dominant.outerPadding_gu'] = 0.2;
                 layout.composition_params['videoSettings.dominant.splitMargin_gu'] = 0;
-                layout.composition_params['videoSettings.showParticipantLabels'] = false;
+                layout.composition_params['videoSettings.showParticipantLabels'] = true;
             } else if (this.selectedLayout === VideoLayout.PRESENTATION) {
                 // Presentation layout: 80/20 split with screenshare dominant, active speaker in right sidebar
                 layout.composition_params['mode'] = 'dominant';
@@ -1387,7 +1387,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                     'videoSettings.dominant.itemInterval_gu': 0.2,
                     'videoSettings.dominant.outerPadding_gu': 0.2,
                     'videoSettings.dominant.splitMargin_gu': 0,
-                    'videoSettings.showParticipantLabels': false
+                    'videoSettings.showParticipantLabels': true
                 }),
                 ...(this.selectedLayout === VideoLayout.PINNED_HORIZONTAL && {
                     'videoSettings.dominant.position': 'left',
@@ -1397,7 +1397,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                     'videoSettings.dominant.itemInterval_gu': 0.2,
                     'videoSettings.dominant.outerPadding_gu': 0.2,
                     'videoSettings.dominant.splitMargin_gu': 0,
-                    'videoSettings.showParticipantLabels': false
+                    'videoSettings.showParticipantLabels': true
                 }),
                 // Text overlay parameters
                 'showTextOverlay': this.showTextOverlay,
@@ -1695,6 +1695,8 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
 
     toggleVirtualBgMenu(): void {
         this.showVirtualBgMenu = !this.showVirtualBgMenu;
+        // Reset loading state to prevent hanging spinner if menu was closed while loading
+        this.isLoadingVirtualBg = false;
     }
     
     // NEW: Handle overlay toggle from service
@@ -1801,7 +1803,15 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     }
 
     async applyVirtualBackground(option: VirtualBackgroundOption): Promise<void> {
-        if (!this.callObject || !this.joined || this.isLoadingVirtualBg) return;
+        // Prevent applying if already loading or if the same background is selected
+        if (this.isLoadingVirtualBg) return;
+        
+        if (option.type === this.currentVirtualBg && option.value === this.currentVirtualBgValue) {
+            this.showVirtualBgMenu = false; // Just close menu if already active
+            return;
+        }
+
+        if (!this.callObject || !this.joined) return;
 
         this.isLoadingVirtualBg = true;
         let success = false;

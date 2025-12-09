@@ -6,12 +6,12 @@
 			[muted]="true" [autoplay]="true" playsinline></video> -->
 		<video autoPlay muted playsInline class="h-full w-full object-cover" [srcObject]="videoStream"></video>
 	</div>
-	<audio *ngIf="audioStream && !local" autoPlay playsInline [srcObject]="audioStream"
-		(loadstart)="onAudioLoadStart($event)">
+	<audio *ngIf="audioStream && !local" autoplay playsinline class="participant-audio" [srcObject]="audioStream"
+		(loadstart)="onAudioLoadStart($event)" (canplay)="onAudioCanPlay($event)">
 		<track kind="captions" />
 	</audio>
-	<audio *ngIf="screenAudioStream && !local" autoPlay playsInline [srcObject]="screenAudioStream"
-		(loadstart)="onScreenAudioLoadStart($event)">
+	<audio *ngIf="screenAudioStream && !local" autoplay playsinline class="screen-audio" [srcObject]="screenAudioStream"
+		(loadstart)="onScreenAudioLoadStart($event)" (canplay)="onScreenAudioCanPlay($event)">
 		<track kind="captions" />
 	</audio>
 	<div class="flex h-full w-full items-center justify-center bg-black-gradient" [class.hidden]="videoReady">

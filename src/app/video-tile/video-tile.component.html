@@ -11,12 +11,12 @@
     <img src="../../assets/vid_off.svg" alt="Camera is off" />
   </div>
 
-  <audio *ngIf="audioStream && !local" autoPlay playsInline [srcObject]="audioStream"
-    (loadstart)="onAudioLoadStart($event)" #audioElement>
+  <audio *ngIf="audioStream && !local" autoplay playsinline class="participant-audio" [srcObject]="audioStream"
+    (loadstart)="onAudioLoadStart($event)" (canplay)="onAudioCanPlay($event)" #audioElement>
     <track kind="captions" />
   </audio>
-  <audio *ngIf="screenAudioStream && !local" autoPlay playsInline [srcObject]="screenAudioStream"
-    (loadstart)="onScreenAudioLoadStart($event)" #screenAudioElement>
+  <audio *ngIf="screenAudioStream && !local" autoplay playsinline class="screen-audio" [srcObject]="screenAudioStream"
+    (loadstart)="onScreenAudioLoadStart($event)" (canplay)="onScreenAudioCanPlay($event)" #screenAudioElement>
     <track kind="captions" />
   </audio>
 

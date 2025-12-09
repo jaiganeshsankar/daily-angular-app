@@ -1,10 +1,12 @@
 import {
   Component,
+  ElementRef,
   EventEmitter,
   Input,
   Output,
   SimpleChanges,
 } from "@angular/core";
+import { SafariAudioService } from '../services/safari-audio.service';
 
 @Component({
   selector: "video-tile",
@@ -12,6 +14,10 @@ import {
   styleUrls: ["./video-tile.component.css"],
 })
 export class VideoTileComponent {
+  constructor(
+    private elementRef: ElementRef,
+    private safariAudioService: SafariAudioService
+  ) {}
   @Input() joined: boolean;
   @Input() videoReady: boolean;
   @Input() audioReady: boolean;
@@ -56,6 +62,48 @@ export class VideoTileComponent {
     if (this.screenAudioTrack) {
       this.addScreenAudioStream(this.screenAudioTrack);
     }
+
+    // Set up periodic audio monitoring for non-local participants
+    if (!this.local) {
+      this.startAudioMonitoring();
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (this.audioMonitorInterval) {
+      clearInterval(this.audioMonitorInterval);
+    }
+  }
+
+  private audioMonitorInterval: any;
+
+  private startAudioMonitoring(): void {
+    // Check audio state every 2 seconds
+    this.audioMonitorInterval = setInterval(() => {
+      if (!this.local) {
+        this.checkAndFixAudioPlayback();
+      }
+    }, 2000);
+  }
+
+  private checkAndFixAudioPlayback(): void {
+    // Check participant audio
+    if (this.audioStream && this.audioReady) {
+      const audioEl = this.elementRef.nativeElement.querySelector('audio.participant-audio') as HTMLAudioElement;
+      if (audioEl && audioEl.paused && audioEl.srcObject) {
+        console.warn(`🚨 Detected paused audio for ${this.userName}, attempting to resume...`);
+        this.forceAudioPlay('audio');
+      }
+    }
+
+    // Check screen audio
+    if (this.screenAudioStream && this.screenAudioReady) {
+      const screenAudioEl = this.elementRef.nativeElement.querySelector('audio.screen-audio') as HTMLAudioElement;
+      if (screenAudioEl && screenAudioEl.paused && screenAudioEl.srcObject) {
+        console.warn(`🚨 Detected paused screen audio for ${this.userName}, attempting to resume...`);
+        this.forceAudioPlay('screenAudio');
+      }
+    }
   }
 
   /**
@@ -77,9 +125,17 @@ export class VideoTileComponent {
     // Handle audio track changes
     if (audioTrack?.currentValue && !this.audioStream) {
       this.addAudioStream(audioTrack.currentValue);
+      // Force audio play after DOM updates for non-Chromium browsers
+      if (!this.local) {
+        setTimeout(() => this.forceAudioPlay('audio'), 0);
+      }
     }
     if (audioTrack?.currentValue && this.audioStream) {
       this.updateAudioTrack(audioTrack.previousValue, audioTrack.currentValue);
+      // Force audio play after track update
+      if (!this.local) {
+        setTimeout(() => this.forceAudioPlay('audio'), 0);
+      }
     }
 
     // Handle screen video track changes
@@ -93,9 +149,17 @@ export class VideoTileComponent {
     // Handle screen audio track changes
     if (screenAudioTrack?.currentValue && !this.screenAudioStream) {
       this.addScreenAudioStream(screenAudioTrack.currentValue);
+      // Force screen audio play after DOM updates
+      if (!this.local) {
+        setTimeout(() => this.forceAudioPlay('screenAudio'), 0);
+      }
     }
     if (screenAudioTrack?.currentValue && this.screenAudioStream) {
       this.updateScreenAudioTrack(screenAudioTrack.previousValue, screenAudioTrack.currentValue);
+      // Force screen audio play after track update
+      if (!this.local) {
+        setTimeout(() => this.forceAudioPlay('screenAudio'), 0);
+      }
     }
   }
 
@@ -178,6 +242,10 @@ export class VideoTileComponent {
     console.log('Audio loadstart event for', this.userName, '- requesting volume reapplication');
     setTimeout(() => {
       this.requestVolumeReapplication();
+      // Also force audio play on loadstart
+      if (!this.local) {
+        this.forceAudioPlay('audio');
+      }
     }, 100);
   }
 
@@ -186,7 +254,27 @@ export class VideoTileComponent {
     console.log('Screen audio loadstart event for', this.userName, '- requesting volume reapplication');
     setTimeout(() => {
       this.requestVolumeReapplication();
+      // Also force screen audio play on loadstart
+      if (!this.local) {
+        this.forceAudioPlay('screenAudio');
+      }
     }, 100);
+  }
+
+  onAudioCanPlay(event: Event): void {
+    // Additional trigger when audio can start playing
+    if (!this.local) {
+      console.log('Audio canplay event for', this.userName, '- forcing play');
+      setTimeout(() => this.forceAudioPlay('audio'), 50);
+    }
+  }
+
+  onScreenAudioCanPlay(event: Event): void {
+    // Additional trigger when screen audio can start playing
+    if (!this.local) {
+      console.log('Screen audio canplay event for', this.userName, '- forcing play');
+      setTimeout(() => this.forceAudioPlay('screenAudio'), 50);
+    }
   }
 
   private requestVolumeReapplication(): void {
@@ -198,4 +286,83 @@ export class VideoTileComponent {
     });
     document.dispatchEvent(event);
   }
+
+  private forceAudioPlay(trackType: 'audio' | 'screenAudio'): void {
+    // Find the specific audio element for this track
+    const selector = trackType === 'audio' ? 'audio.participant-audio' : 'audio.screen-audio';
+    const audioEl = this.elementRef.nativeElement.querySelector(selector) as HTMLAudioElement;
+    
+    if (audioEl) {
+      console.log(`🔊 Attempting to force play ${trackType} for ${this.userName}:`, {
+        paused: audioEl.paused,
+        readyState: audioEl.readyState,
+        srcObject: !!audioEl.srcObject,
+        audioContextState: this.safariAudioService.isSafariBrowser() ? 
+          (this.safariAudioService.isAudioContextRunning() ? 'running' : 'suspended') : 'N/A'
+      });
+      
+      // Safari: Ensure AudioContext is running before playing audio
+      if (this.safariAudioService.isSafariBrowser()) {
+        this.safariAudioService.resumeAudioContext().then(() => {
+          console.log('🎵 Safari AudioContext confirmed running, attempting audio play');
+          this.attemptAudioPlay(audioEl, trackType);
+          // Connect audio to AudioContext for Safari
+          if (audioEl.srcObject) {
+            this.safariAudioService.connectMediaStreamToContext(audioEl.srcObject as MediaStream);
+          }
+        }).catch(() => {
+          console.warn('Failed to resume AudioContext, trying audio play anyway');
+          this.attemptAudioPlay(audioEl, trackType);
+        });
+      } else {
+        this.attemptAudioPlay(audioEl, trackType);
+      }
+    } else {
+      console.warn(`⚠️ Audio element not found for ${trackType} (participant: ${this.userName})`);
+    }
+  }
+
+  private attemptAudioPlay(audioEl: HTMLAudioElement, trackType: 'audio' | 'screenAudio'): void {
+    // Force play regardless of current state
+    const playPromise = audioEl.play();
+    if (playPromise !== undefined) {
+      playPromise
+        .then(() => {
+          console.log(`✅ Successfully started ${trackType} playback for ${this.userName}`);
+        })
+        .catch(error => {
+          console.warn(`❌ Autoplay failed for ${trackType} (participant: ${this.userName}):`, error.message);
+          // Set up user interaction listener for this specific audio element
+          this.setupUserInteractionListener(audioEl, trackType);
+        });
+    }
+  }
+
+  private setupUserInteractionListener(audioEl: HTMLAudioElement, trackType: 'audio' | 'screenAudio'): void {
+    const playOnInteraction = () => {
+      // Safari: Resume AudioContext first using shared service
+      if (this.safariAudioService.isSafariBrowser()) {
+        this.safariAudioService.resumeAudioContext().then(() => {
+          console.log('🎵 Safari AudioContext resumed via shared service');
+          this.attemptAudioPlay(audioEl, trackType);
+        }).catch(() => {
+          this.attemptAudioPlay(audioEl, trackType);
+        });
+      } else {
+        this.attemptAudioPlay(audioEl, trackType);
+      }
+      
+      // Remove listeners after first successful interaction
+      document.removeEventListener('click', playOnInteraction);
+      document.removeEventListener('touchstart', playOnInteraction);
+      document.removeEventListener('keydown', playOnInteraction);
+    };
+
+    // Listen for any user interaction
+    document.addEventListener('click', playOnInteraction, { once: true });
+    document.addEventListener('touchstart', playOnInteraction, { once: true });
+    document.addEventListener('keydown', playOnInteraction, { once: true });
+  }
+
+
 }
