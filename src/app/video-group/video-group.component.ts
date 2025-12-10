@@ -12,6 +12,7 @@ import DailyIframe, {
 } from "@daily-co/daily-js";
 import { VideoLayout } from "../models/video-layout.enum";
 import { LiveStreamService } from "../services/live-stream.service";
+import { SafariAudioService } from "../services/safari-audio.service";
 
 export type Participant = {
     videoTrack?: MediaStreamTrack | undefined;
@@ -97,6 +98,10 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     recordingEnabled: boolean = false; // Changed to false for safety first
     showGoLiveMenu: boolean = false;
     readonly OVERLAY_IMAGE_URL = 'https://assets.daily.co/assets/daily-logo-light.png';
+    
+    // SAFARI AUDIO FIX: Health monitoring
+    private audioHealthCheckInterval: any;
+    private readonly AUDIO_HEALTH_CHECK_INTERVAL = 5000; // Check every 5 seconds
     readonly OVERLAY_TEXT = 'Live from Daily Angular';
     
     // Active speaker tracking for presentation layout
@@ -107,7 +112,8 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
 
     constructor(
         private liveStreamService: LiveStreamService,
-        private cdr: ChangeDetectorRef
+        private cdr: ChangeDetectorRef,
+        private safariAudioService: SafariAudioService
     ) {}
 
     virtualBackgroundOptions: VirtualBackgroundOption[] = [
@@ -201,7 +207,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
 
         // Listen for volume reapplication requests from audio elements
         this.volumeReapplicationListener = (event: any) => {
-            console.log('🔊 Volume reapplication requested by:', event.detail?.participantId);
+            // Volume reapplication requested - removed log to prevent spam
             this.debouncedVolumeReapply();
         };
         document.addEventListener('requestVolumeReapplication', this.volumeReapplicationListener);
@@ -272,6 +278,10 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         }
         if (this.volumeReapplyTimeout) {
             clearTimeout(this.volumeReapplyTimeout);
+        }
+        
+        if (this.audioHealthCheckInterval) {
+            clearInterval(this.audioHealthCheckInterval);
         }
         
         // Unsubscribe from live stream service
@@ -559,6 +569,9 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
 
         this.updateTrackSubscriptions();
         
+        // Start Safari audio health monitoring
+        this.startAudioHealthMonitoring();
+        
         // Apply initial screenshare audio volume after a brief delay
         setTimeout(() => {
             this.setScreenshareAudioVolume(this.mainAudioVolume);
@@ -703,6 +716,13 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         // CRITICAL FIX: Reapply volumes when tracks start/stop
         // This is especially important for screen audio tracks
         this.debouncedVolumeReapply();
+        
+        // SAFARI AUDIO FIX: Reconnect audio streams when audio tracks change
+        if (e.type === "audio" && this.safariAudioService.isSafariBrowser()) {
+            setTimeout(() => {
+                this.safariAudioService.forceReconnectAllAudio();
+            }, 200);
+        }
     };
 
     handleParticipantLeft = (e: DailyEventObjectParticipantLeft | undefined): void => {
@@ -828,16 +848,14 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         const newVolume = this.isBackstageMuted ? 0 : 1;
         const backstageParticipants = Object.values(this.participants).filter(p => p.role === 'backstage' && !p.local);
         
-        console.log(`Updating ${backstageParticipants.length} backstage participants to volume ${newVolume}`);
-        console.log('Backstage participants:', backstageParticipants.map(p => ({ id: p.id, userName: p.userName, role: p.role })));
-        
+        // Removed excessive logging that fires constantly
         backstageParticipants.forEach(participant => {
             this.setParticipantAudioVolume(participant.id, newVolume);
         });
     }
 
     updateScreenshareAudioVolume(): void {
-        console.log(`Setting screenshare audio volume to ${this.mainAudioVolume}`);
+        // Removed excessive logging
         this.setScreenshareAudioVolume(this.mainAudioVolume);
     }
 
@@ -845,8 +863,6 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         try {
             let audioElementsFound = 0;
             const participant = this.participants[participantId];
-            
-            console.log(`Setting volume ${volume} for participant ${participantId} (${participant?.role})`);
 
             // Method 1: Find audio elements by data-participant-id attribute
             const audioElements = document.querySelectorAll(`audio[data-participant-id="${participantId}"]`);
@@ -854,7 +870,10 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 if (audioElement && typeof audioElement.volume !== 'undefined') {
                     audioElement.volume = Math.max(0, Math.min(1, volume));
                     audioElementsFound++;
-                    console.log(`Set volume via data-participant-id for ${participantId}`);
+                    // Enable autoplay for better audio experience
+                    if (audioElement.paused) {
+                        audioElement.play().catch(() => {/* Ignore autoplay failures */});
+                    }
                 }
             });
 
@@ -865,7 +884,9 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 if (audioEl && typeof audioEl.volume !== 'undefined') {
                     audioEl.volume = Math.max(0, Math.min(1, volume));
                     audioElementsFound++;
-                    console.log(`Set volume via data-peer-id for ${participantId}`);
+                    if (audioEl.paused) {
+                        audioEl.play().catch(() => {/* Ignore autoplay failures */});
+                    }
                 }
             });
 
@@ -878,7 +899,9 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                     if (hasParticipantTrack) {
                         audioElement.volume = Math.max(0, Math.min(1, volume));
                         audioElementsFound++;
-                        console.log(`Set volume via audio track match for ${participantId}`);
+                        if (audioElement.paused) {
+                            audioElement.play().catch(() => {/* Ignore autoplay failures */});
+                        }
                     }
                 }
             });
@@ -892,17 +915,18 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 if (audioEl && participantIdAttr === participantId && typeof audioEl.volume !== 'undefined') {
                     audioEl.volume = Math.max(0, Math.min(1, volume));
                     audioElementsFound++;
-                    console.log(`Set volume via video-tile for ${participantId}`);
+                    if (audioEl.paused) {
+                        audioEl.play().catch(() => {/* Ignore autoplay failures */});
+                    }
                 }
             });
 
+            // Only log errors and missing elements, not successful operations
             if (audioElementsFound === 0) {
-                console.warn(`No audio elements found for participant ${participantId} (${participant?.role})`);
-                // Log available elements for debugging
-                console.log('Available audio elements:', document.querySelectorAll('audio').length);
-                console.log('Available peer elements:', document.querySelectorAll('[data-peer-id]').length);
-            } else {
-                console.log(`Successfully set volume for ${audioElementsFound} audio elements for participant ${participantId}`);
+                // Only log missing elements occasionally to avoid spam
+                if (Math.random() < 0.1) { // Log only 10% of the time
+                    console.warn(`No audio elements found for participant ${participantId} (${participant?.role})`);
+                }
             }
         } catch (error) {
             console.error('Error setting audio volume for participant:', participantId, error);
@@ -912,8 +936,6 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     private setScreenshareAudioVolume(volume: number): void {
         try {
             let audioElementsFound = 0;
-            
-            console.log(`Setting screenshare audio volume to ${volume}`);
 
             // Find all audio elements and check if they contain screen audio tracks
             const allAudioElements = document.querySelectorAll('audio');
@@ -930,30 +952,23 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                             if (hasScreenAudioTrack) {
                                 audioElement.volume = Math.max(0, Math.min(1, volume));
                                 audioElementsFound++;
-                                console.log(`Set screenshare audio volume for ${participant.userName} (${participant.id})`);
+                                if (audioElement.paused) {
+                                    audioElement.play().catch(() => {/* Ignore autoplay failures */});
+                                }
                             }
                         }
                     });
                 }
             });
 
-            if (audioElementsFound === 0) {
-                console.warn(`No screenshare audio elements found`);
-                console.log('Available audio elements:', document.querySelectorAll('audio').length);
-            } else {
-                console.log(`Successfully set screenshare audio volume for ${audioElementsFound} audio elements`);
-            }
+            // Remove excessive logging - only log errors
         } catch (error) {
             console.error('Error setting screenshare audio volume:', error);
         }
     }
 
     private reapplyAllVolumeSettings(): void {
-        console.log('🔄 Reapplying all volume settings to prevent browser reset...', {
-            mainAudioVolume: this.mainAudioVolume,
-            backstageMuted: this.isBackstageMuted
-        });
-        
+        // Removed excessive logging - this fires constantly
         try {
             // Reapply stage volumes
             this.updateStageVolumes();
@@ -963,8 +978,6 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             
             // Reapply screenshare audio volume
             this.setScreenshareAudioVolume(this.mainAudioVolume);
-            
-            console.log('✅ Volume settings reapplied successfully');
         } catch (error) {
             console.error('❌ Error reapplying volume settings:', error);
         }
@@ -1480,7 +1493,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
 
     // Handle active speaker changes
     handleActiveSpeakerChange = (event: any): void => {
-        console.log('🎤 Active speaker change event:', event);
+        // Removed excessive logging - this fires constantly
         
         // Daily.js provides activeSpeaker.peerId for the active speaker
         let newActiveSpeakerId: string | null = null;
@@ -1491,7 +1504,10 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         
         // Only update if the active speaker actually changed
         if (this.activeSpeakerId !== newActiveSpeakerId) {
-            console.log(`🎤 Active speaker changed from ${this.activeSpeakerId} to ${newActiveSpeakerId}`);
+            // Only log significant speaker changes occasionally
+            if (Math.random() < 0.2) {
+                console.log(`🎤 Active speaker: ${newActiveSpeakerId}`);
+            }
             this.activeSpeakerId = newActiveSpeakerId;
             
             // Update track subscriptions to bump new speaker to high quality
@@ -1499,7 +1515,6 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             
             // Trigger change detection for presentation layout
             if (this.selectedLayout === VideoLayout.PRESENTATION) {
-                console.log('🔄 Updating presentation layout due to active speaker change');
                 this.cdr.detectChanges();
                 // Update live stream layout for instant speaker switching
                 this.updateLiveStreamLayout();
@@ -2019,6 +2034,49 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             this.reapplyAllVolumeSettings();
             this.cdr.detectChanges(); // Trigger change detection only when needed
         }, this.VOLUME_REAPPLY_DEBOUNCE);
+    }
+
+    private startAudioHealthMonitoring(): void {
+        if (!this.safariAudioService.isSafariBrowser()) return;
+        
+        this.audioHealthCheckInterval = setInterval(() => {
+            this.checkAudioHealth();
+        }, this.AUDIO_HEALTH_CHECK_INTERVAL);
+    }
+
+    private checkAudioHealth(): void {
+        if (!this.joined || !this.safariAudioService.isSafariBrowser()) return;
+        
+        // Check if AudioContext is still running
+        if (!this.safariAudioService.isAudioContextRunning()) {
+            console.warn('🚨 Safari AudioContext not running, attempting recovery...');
+            this.safariAudioService.resumeAudioContext();
+            return;
+        }
+        
+        // Check for silent audio elements that should be playing
+        const audioElements = document.querySelectorAll('audio');
+        let deadAudioDetected = false;
+        
+        audioElements.forEach((audioEl: any) => {
+            if (audioEl.srcObject && !audioEl.paused) {
+                // Audio element should be playing but might be silent
+                // Check if tracks are active
+                const tracks = audioEl.srcObject.getTracks();
+                const hasActiveTracks = tracks.some((track: MediaStreamTrack) => 
+                    track.readyState === 'live' && track.enabled
+                );
+                
+                if (!hasActiveTracks) {
+                    deadAudioDetected = true;
+                }
+            }
+        });
+        
+        if (deadAudioDetected) {
+            console.warn('🚨 Dead audio tracks detected, forcing reconnection...');
+            this.safariAudioService.forceReconnectAllAudio();
+        }
     }
 
     private applyTiledLayout(): void {

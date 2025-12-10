@@ -141,12 +141,7 @@ export class MainstageSpeakerTileComponent implements OnInit, OnDestroy, OnChang
 
 	addAudioStream(track: MediaStreamTrack) {
 		this.audioStream = new MediaStream([track]);
-		console.log('🎵 Mainstage audio stream created for participant:', {
-			userName: this.userName,
-			local: this.local,
-			trackId: track.id,
-			willPlay: !this.local  // Should only play if not local
-		});
+			// Audio stream created - removed excessive logging
 	}
 
 	updateVideoTrack(oldTrack: MediaStreamTrack, track: MediaStreamTrack) {
@@ -200,7 +195,7 @@ export class MainstageSpeakerTileComponent implements OnInit, OnDestroy, OnChang
 
 	onAudioLoadStart(event: Event): void {
 		// When audio element starts loading new content, request volume reapplication
-		console.log('Audio loadstart event for', this.userName, '- requesting volume reapplication');
+		// Removed excessive logging
 		setTimeout(() => {
 			this.requestVolumeReapplication();
 			// Also force audio play on loadstart
@@ -212,7 +207,7 @@ export class MainstageSpeakerTileComponent implements OnInit, OnDestroy, OnChang
 
 	onScreenAudioLoadStart(event: Event): void {
 		// When screen audio element starts loading new content, request volume reapplication
-		console.log('Screen audio loadstart event for', this.userName, '- requesting volume reapplication');
+		// Removed excessive logging
 		setTimeout(() => {
 			this.requestVolumeReapplication();
 			// Also force screen audio play on loadstart
@@ -225,7 +220,7 @@ export class MainstageSpeakerTileComponent implements OnInit, OnDestroy, OnChang
 	onAudioCanPlay(event: Event): void {
 		// Additional trigger when audio can start playing
 		if (!this.local) {
-			console.log('Audio canplay event for', this.userName, '- forcing play');
+			// Audio canplay - removed excessive logging
 			setTimeout(() => this.forceAudioPlay('audio'), 50);
 		}
 	}
@@ -233,7 +228,7 @@ export class MainstageSpeakerTileComponent implements OnInit, OnDestroy, OnChang
 	onScreenAudioCanPlay(event: Event): void {
 		// Additional trigger when screen audio can start playing
 		if (!this.local) {
-			console.log('Screen audio canplay event for', this.userName, '- forcing play');
+			// Screen audio canplay - removed excessive logging
 			setTimeout(() => this.forceAudioPlay('screenAudio'), 50);
 		}
 	}
@@ -253,25 +248,19 @@ export class MainstageSpeakerTileComponent implements OnInit, OnDestroy, OnChang
     const audioEl = this.elementRef.nativeElement.querySelector(selector) as HTMLAudioElement;
     
     if (audioEl) {
-      console.log(`🔊 Attempting to force play ${trackType} for ${this.userName}:`, {
-        paused: audioEl.paused,
-        readyState: audioEl.readyState,
-        srcObject: !!audioEl.srcObject,
-        audioContextState: this.safariAudioService.isSafariBrowser() ? 
-          (this.safariAudioService.isAudioContextRunning() ? 'running' : 'suspended') : 'N/A'
-      });
+      // Attempting audio play - removed excessive logging
       
       // Safari: Ensure AudioContext is running before playing audio
       if (this.safariAudioService.isSafariBrowser()) {
         this.safariAudioService.resumeAudioContext().then(() => {
-          console.log('🎵 Safari AudioContext confirmed running, attempting audio play');
+          // Safari AudioContext running - removed excessive logging
           this.attemptAudioPlay(audioEl, trackType);
           // Connect audio to AudioContext for Safari
           if (audioEl.srcObject) {
             this.safariAudioService.connectMediaStreamToContext(audioEl.srcObject as MediaStream);
           }
         }).catch(() => {
-          console.warn('Failed to resume AudioContext, trying audio play anyway');
+          // AudioContext resume failed - removed excessive logging
           this.attemptAudioPlay(audioEl, trackType);
         });
       } else {
@@ -288,10 +277,13 @@ export class MainstageSpeakerTileComponent implements OnInit, OnDestroy, OnChang
     if (playPromise !== undefined) {
       playPromise
         .then(() => {
-          console.log(`✅ Successfully started ${trackType} playback for ${this.userName}`);
+          // Playback started successfully - removed excessive logging
         })
         .catch(error => {
-          console.warn(`❌ Autoplay failed for ${trackType} (participant: ${this.userName}):`, error.message);
+          // Only log autoplay failures occasionally to avoid spam
+          if (Math.random() < 0.1) {
+            console.warn(`❌ Autoplay failed for ${trackType} (participant: ${this.userName}):`, error.message);
+          }
           // Set up user interaction listener for this specific audio element
           this.setupUserInteractionListener(audioEl, trackType);
         });
@@ -301,7 +293,7 @@ export class MainstageSpeakerTileComponent implements OnInit, OnDestroy, OnChang
       // Safari: Resume AudioContext first using shared service
       if (this.safariAudioService.isSafariBrowser()) {
         this.safariAudioService.resumeAudioContext().then(() => {
-          console.log('🎵 Safari AudioContext resumed via shared service');
+          // AudioContext resumed - removed excessive logging
           this.attemptAudioPlay(audioEl, trackType);
         }).catch(() => {
           this.attemptAudioPlay(audioEl, trackType);
