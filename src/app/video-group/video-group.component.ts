@@ -215,6 +215,13 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                     strictMode: false,
                     subscribeToTracksAutomatically: false,
                 });
+            } else {
+                // Ensure subscribeToTracksAutomatically is disabled even for existing call objects
+                try {
+                    await this.callObject.setSubscribeToTracksAutomatically(false);
+                } catch (error) {
+                    console.warn('Could not disable subscribeToTracksAutomatically on existing call object:', error);
+                }
             }
 
             this.callObject
@@ -431,18 +438,11 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
 
     addParticipant(participant: DailyParticipant) {
         const p = this.formatParticipantObj(participant);
-        console.log('➕ Adding participant:', {
-            id: p.id,
-            local: p.local,
-            audioTrack: !!p.audioTrack,
-            audioReady: p.audioReady,
-            userName: p.userName,
-            dailyLocal: participant.local  // Compare with Daily.js local property
-        });
+        // Reduced logging for performance
         
         this.participants[participant.session_id] = p;
         this.participantRoles[participant.session_id] = p.role;
-        this.updateAudioSubscriptions();
+        this.updateTrackSubscriptions();
 
         // Prevent local audio feedback - ensure local participant audio is never played
         if (p.local) {
@@ -557,7 +557,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             this.participantRoles[localId] = 'backstage';
         }
 
-        this.updateAudioSubscriptions();
+        this.updateTrackSubscriptions();
         
         // Apply initial screenshare audio volume after a brief delay
         setTimeout(() => {
@@ -573,7 +573,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
 
     handleParticipantUpdated = async (e: DailyEventObjectParticipant | undefined) => {
         if (!e) return;
-        console.log('Participant updated:', e.participant.user_name, e.participant.userData);
+        // Removed excessive logging that fires constantly per participant
         const participant = e.participant;
         const existingP = this.participants[participant.session_id];
         if (!existingP) {
@@ -673,12 +673,12 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             }, 100);
         }
 
-        this.updateAudioSubscriptions();
+        this.updateTrackSubscriptions();
         
         // Note: Active speaker tracking should be handled by Daily.js active-speaker-change events
         // Don't manually set activeSpeakerId here as it can interfere with proper event handling
         
-        console.log('Recalculating layout due to participant update', this.getStageParticipants().length);
+        // Removed excessive logging
         if (this.getStageParticipants().length > 0) {
             this.reCalculateLayoutData();
         }
@@ -689,7 +689,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     };
 
     handleTrackStartedStopped = (e: DailyEventObjectTrack | undefined): void => {
-        console.log("track started or stopped");
+        // Removed excessive logging
         if (!e || !e.participant || !this.joined) return;
         this.updateTrack(e.participant, e.type);
 
@@ -1494,6 +1494,9 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             console.log(`🎤 Active speaker changed from ${this.activeSpeakerId} to ${newActiveSpeakerId}`);
             this.activeSpeakerId = newActiveSpeakerId;
             
+            // Update track subscriptions to bump new speaker to high quality
+            this.updateTrackSubscriptions();
+            
             // Trigger change detection for presentation layout
             if (this.selectedLayout === VideoLayout.PRESENTATION) {
                 console.log('🔄 Updating presentation layout due to active speaker change');
@@ -1667,7 +1670,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         }
     }
 
-    updateAudioSubscriptions(): void {
+    updateTrackSubscriptions(): void {
         if (!this.callObject || !this.joined) return;
 
         try {
@@ -1685,11 +1688,17 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                     shouldSubscribeAudio = participant.role === 'stage';
                 }
 
+                // Determine if participant is primary (high priority)
+                const isPrimary = 
+                    participant.id === this.screenSharingParticipant?.id || // Screen sharer
+                    participant.id === this.activeSpeakerId; // Active speaker
+
+                // Configure video subscription - use boolean values as per Daily.js API
                 updateObject[participant.id] = {
                     setSubscribedTracks: {
                         audio: shouldSubscribeAudio,
-                        video: true,
-                        screenVideo: true,
+                        video: true, // Subscribe to video for all participants
+                        screenVideo: true,    // Always subscribe to screen share
                         screenAudio: true
                     }
                 };
@@ -1697,12 +1706,33 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
 
             if (Object.keys(updateObject).length > 0) {
                 this.callObject.updateParticipants(updateObject);
-                console.log('Audio subscriptions updated (what we hear):', updateObject);
+                
+                // Set video quality layers after subscribing
+                Object.values(this.participants).forEach(participant => {
+                    if (participant.local) return;
+                    
+                    const isPrimary = 
+                        participant.id === this.screenSharingParticipant?.id || 
+                        participant.id === this.activeSpeakerId;
+                    
+                    // Set video receive quality using updateReceiveSettings
+                    // Layer 2 = high quality, Layer 0 = low quality
+                    try {
+                        const qualitySettings = {
+                            [participant.id]: {
+                                video: { layer: isPrimary ? 2 : 0 }
+                            }
+                        };
+                        this.callObject?.updateReceiveSettings(qualitySettings);
+                    } catch (qualityError) {
+                        console.warn('Could not set video quality for participant', participant.id, qualityError);
+                    }
+                });
             }
 
         } catch (error: any) {
-            console.error('Error updating audio subscriptions:', error);
-            this.error = `Error updating audio subscriptions: ${error.message}`;
+            console.error('Error updating track subscriptions:', error);
+            this.error = `Error updating track subscriptions: ${error.message}`;
         }
     }
 
