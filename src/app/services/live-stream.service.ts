@@ -66,10 +66,11 @@ export class LiveStreamService {
   }
 
   setRecordingEnabled(enabled: boolean): void {
-    console.log('🎥 LiveStreamService: setRecordingEnabled called with:', enabled);
-    console.log('🎥 Previous state:', this.recordingEnabledSubject.value);
+    const previousState = this.recordingEnabledSubject.value;
+    if (previousState !== enabled) {
+      console.log('🎥 LiveStreamService: Recording state changing from', previousState, 'to', enabled);
+    }
     this.recordingEnabledSubject.next(enabled);
-    console.log('🎥 New state set and broadcast to subscribers');
   }
 
   toggleRecording(): void {

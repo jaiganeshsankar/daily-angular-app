@@ -96,6 +96,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     showTextOverlay: boolean = true;
     showImageOverlay: boolean = true;
     recordingEnabled: boolean = false; // Changed to false for safety first
+    private isUpdatingFromMessage: boolean = false; // Prevent infinite loops
     showGoLiveMenu: boolean = false;
     readonly OVERLAY_IMAGE_URL = 'https://assets.daily.co/assets/daily-logo-light.png';
     
@@ -186,23 +187,21 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         });
         
         this.recordingEnabledSubscription = this.liveStreamService.recordingEnabledState$.subscribe(enabled => {
-            console.log('🎥 VideoGroupComponent: Recording enabled state changed to:', enabled);
-            console.log('🎥 Previous local state:', this.recordingEnabled);
+            if (this.recordingEnabled !== enabled) {
+                console.log('🎥 VideoGroupComponent: Recording state changed to:', enabled);
+            }
             this.recordingEnabled = enabled;
-            console.log('🎥 Updated local state to:', this.recordingEnabled);
             
-            // Broadcast recording setting to all participants when it changes
-            if (this.callObject && this.joined) {
+            // Only broadcast if this is not from a received message (prevent infinite loop)
+            if (this.callObject && this.joined && !this.isUpdatingFromMessage) {
                 this.callObject.sendAppMessage({
                     type: 'RECORDING_SETTING',
                     enabled: enabled
                 }, '*');
-                console.log('📡 Broadcasting recording setting to all participants:', enabled);
             }
             
-            this.cdr.markForCheck(); // Mark for check first
-            this.cdr.detectChanges(); // Then trigger detection
-            console.log('🎥 Change detection triggered from subscription');
+            this.cdr.markForCheck();
+            this.cdr.detectChanges();
         });
 
         // Listen for volume reapplication requests from audio elements
@@ -255,6 +254,19 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 startAudioOff: false,
                 startVideoOff: false
             });
+            
+            // Set high-quality audio input after joining
+            try {
+                await this.callObject.updateInputSettings({
+                    audio: {
+                        // Disable audio processing for higher fidelity
+                        processor: { type: 'none' }
+                    }
+                });
+                console.log('High-quality audio settings applied');
+            } catch (error) {
+                console.warn('Could not apply high-quality audio settings:', error);
+            }
             
             // Disable local audio monitoring to prevent hearing yourself
             if (this.callObject.localAudio()) {
@@ -366,27 +378,34 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             this.cdr.detectChanges();
         }
         
-        // Handle RECORDING_SETTING messages for Go Live dropdown selection
-        if (e.data.type === 'RECORDING_SETTING' && typeof e.data.enabled === 'boolean') {
+        // Get local participant ID to ignore self-messages and prevent infinite loops
+        const localParticipant = this.callObject?.participants()?.local;
+        const isFromSelf = localParticipant && e.fromId === localParticipant.session_id;
+        
+        // Handle RECORDING_SETTING messages for Go Live dropdown selection (ignore messages from self)
+        if (e.data.type === 'RECORDING_SETTING' && typeof e.data.enabled === 'boolean' && !isFromSelf) {
             console.log(`📡 Received recording setting from ${e.fromId}: ${e.data.enabled}`);
+            
+            // Set flag to prevent broadcasting when updating from message
+            this.isUpdatingFromMessage = true;
             this.recordingEnabled = e.data.enabled;
             this.liveStreamService.setRecordingEnabled(e.data.enabled);
+            this.isUpdatingFromMessage = false;
+            
             this.cdr.detectChanges();
         }
         
-        // NEW: Handle recording state change messages
-        if (e.data.type === 'RECORDING_STATE_CHANGE' && typeof e.data.recordingEnabled === 'boolean') {
+        // Handle recording state change messages (ignore messages from self)
+        if (e.data.type === 'RECORDING_STATE_CHANGE' && typeof e.data.recordingEnabled === 'boolean' && !isFromSelf) {
             console.log(`📡 Received recording state change from ${e.fromId}: ${e.data.recordingEnabled}`);
-            console.log('🎥 Current local recording state:', this.recordingEnabled);
             
-            // Update local state to match the sender's state
+            // Set flag to prevent broadcasting when updating from message  
+            this.isUpdatingFromMessage = true;
             this.liveStreamService.setRecordingEnabled(e.data.recordingEnabled);
-            console.log('🎥 Updated local recording state to:', e.data.recordingEnabled);
+            this.isUpdatingFromMessage = false;
             
-            // Force change detection to update UI
             this.cdr.markForCheck();
             this.cdr.detectChanges();
-            console.log('🎥 UI updated from app message');
         }
         
 
@@ -549,6 +568,33 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             console.log('Virtual background processor is ready.');
         } catch (e) {
             console.warn('Failed to pre-warm VB processor', e);
+        }
+
+        // Configure high-quality audio settings
+        try {
+            console.log('Configuring high-quality audio...');
+            
+            // Set audio constraints for higher quality
+            const audioConstraints = {
+                echoCancellation: true,      // Keep for feedback prevention
+                noiseSuppression: false,     // Disable - can reduce quality
+                autoGainControl: false,      // Disable - can cause compression artifacts
+                sampleRate: { ideal: 48000 }, // High sample rate (48kHz)
+                channelCount: { ideal: 2 }    // Stereo if supported
+            };
+
+            // Try to get a high-quality audio stream and set it
+            const stream = await navigator.mediaDevices.getUserMedia({ 
+                audio: audioConstraints 
+            });
+            
+            await this.callObject.setInputDevicesAsync({
+                audioDeviceId: stream.getAudioTracks()[0].getSettings().deviceId
+            });
+
+            console.log('High-quality audio configured successfully');
+        } catch (error) {
+            console.warn('Could not configure high-quality audio:', error);
         }
 
         const { access } = this.callObject.accessState();

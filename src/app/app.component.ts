@@ -34,11 +34,10 @@ export class AppComponent implements OnInit, OnDestroy {
         this.showImageOverlay = visible;
       }),
       this.liveStreamService.recordingEnabledState$.subscribe(enabled => {
-        console.log('🎥 AppComponent: Recording state changed to:', enabled);
-        console.log('🎥 Previous app state:', this.recordingEnabled);
+        if (this.recordingEnabled !== enabled) {
+          console.log('🎥 AppComponent: Recording state changed to:', enabled);
+        }
         this.recordingEnabled = enabled;
-        console.log('🎥 Updated app state to:', this.recordingEnabled);
-        console.log('🎥 App component should now show updated recording button state');
       })
     );
   }
