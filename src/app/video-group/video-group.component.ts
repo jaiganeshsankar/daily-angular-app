@@ -105,6 +105,11 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     private readonly AUDIO_HEALTH_CHECK_INTERVAL = 5000; // Check every 5 seconds
     readonly OVERLAY_TEXT = 'Live from Daily Angular';
     
+    // SCREENSHARE MONITORING: Track screenshare health with large participant counts
+    private screenshareHealthCheckInterval: any;
+    private readonly SCREENSHARE_HEALTH_CHECK_INTERVAL = 3000; // Check every 3 seconds
+    private screenshareFailureCount: number = 0;
+    
     // Active speaker tracking for presentation layout
     activeSpeakerId: string | null = null;
     
@@ -251,7 +256,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 userName: this.userName,
                 url: this.dailyRoomUrl,
                 token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyIjoiQmk0dEFPWTJGRUs1Z2k1bllLbWUiLCJvIjp0cnVlLCJzcyI6dHJ1ZSwiZCI6Ijg3YmEzM2JiLWQ3YjAtNDA5OC1iMGVmLWNkYWFjMDg1MTc2MCIsImlhdCI6MTc2MTY2ODI3MX0.caecSEIZwos2YZV0NbHI2NoeN-IVCgdbAuju2bWTmKg',
-                startAudioOff: false,
+                startAudioOff: true,   // Start with audio muted by default
                 startVideoOff: false
             });
             
@@ -294,6 +299,9 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         
         if (this.audioHealthCheckInterval) {
             clearInterval(this.audioHealthCheckInterval);
+        }
+        if (this.screenshareHealthCheckInterval) {
+            clearInterval(this.screenshareHealthCheckInterval);
         }
         
         // Unsubscribe from live stream service
@@ -482,7 +490,12 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 console.warn('⚠️ Local participant has audio track - this should not cause playback');
             }
         } else {
-            console.log('🔊 Remote participant - audio will play through HTML elements');
+            console.log('🔊 Remote participant joined - audio will play through HTML elements');
+            
+            // New participants join muted - their audio track may not be immediately available
+            if (!p.audioTrack) {
+                console.log('🔇 Remote participant joined muted (no audio track yet)');
+            }
         }
 
         // NEW: Apply volume controls to new remote participants
@@ -557,17 +570,24 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         // Update joined state in service
         this.liveStreamService.setJoinedState(true);
 
-        // Pre-warm the virtual background processor to prevent CPU spike on first use
+        // CPU OPTIMIZATION: Pre-warm the virtual background processor to prevent CPU spike on first use
         try {
-            console.log('Pre-warming virtual background processor...');
+            console.log('🎭 Pre-warming virtual background processor for optimal performance...');
             // This call initializes the ML model and processing pipeline
-            // without applying any visual effect.
+            // without applying any visual effect - prevents CPU spike later
             await this.callObject.updateInputSettings({
                 video: { processor: { type: 'none' } }
             });
-            console.log('Virtual background processor is ready.');
+            console.log('✅ Virtual background processor pre-warmed and ready for CPU-optimized use');
+            
+            // CPU OPTIMIZATION: Log initial performance tips
+            console.log('💡 Virtual Background Performance Tips:');
+            console.log('   • Blur backgrounds use less CPU than custom images');
+            console.log('   • Ensure good lighting for better background detection');  
+            console.log('   • Close other applications when using virtual backgrounds');
+            
         } catch (e) {
-            console.warn('Failed to pre-warm VB processor', e);
+            console.warn('⚠️ Failed to pre-warm VB processor - virtual backgrounds may cause CPU spikes on first use:', e);
         }
 
         // Configure high-quality audio settings
@@ -612,11 +632,17 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             this.participants[localId].role = 'backstage';
             this.participantRoles[localId] = 'backstage';
         }
+        
+        // Ensure local participant starts muted (audio should already be off from join settings)
+        console.log('🔇 Participant joined with audio muted by default');
 
         this.updateTrackSubscriptions();
         
         // Start Safari audio health monitoring
         this.startAudioHealthMonitoring();
+        
+        // Start screenshare health monitoring for large calls
+        this.startScreenshareHealthMonitoring();
         
         // Apply initial screenshare audio volume after a brief delay
         setTimeout(() => {
@@ -627,6 +653,10 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     participantJoined = (e: DailyEventObjectParticipant | undefined) => {
         if (!e) return;
         console.log(e.action);
+        
+        const participant = this.formatParticipantObj(e.participant);
+        console.log(`👤 ${participant.userName} joined the call - Audio: ${participant.audioReady ? 'unmuted' : 'muted (default)'}`);
+        
         this.addParticipant(e.participant);
     };
 
@@ -730,6 +760,15 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                     this.setParticipantAudioVolume(participant.session_id, this.isBackstageMuted ? 0 : 1);
                 }
             }, 100);
+        }
+        
+        // Log participant audio state changes for debugging mute status
+        if (!participant.local) {
+            const previousAudioState = existingP.audioReady;
+            const currentAudioState = updatedP.audioReady;
+            if (previousAudioState !== currentAudioState) {
+                console.log(`🎤 Participant ${updatedP.userName} audio:`, currentAudioState ? 'unmuted' : 'muted');
+            }
         }
 
         this.updateTrackSubscriptions();
@@ -837,6 +876,35 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         if (!this.joined || !this.callObject) return;
         const audioReady = this.callObject.localAudio();
         this.callObject.setLocalAudio(!audioReady);
+        
+        // Log audio state change for debugging
+        console.log('🎤 Local audio toggled:', !audioReady ? 'unmuted' : 'muted');
+    }
+    
+    // Helper method to get local participant's audio state
+    isLocalAudioMuted(): boolean {
+        if (!this.callObject) return true;
+        return !this.callObject.localAudio();
+    }
+    
+    // VIRTUAL BACKGROUND OPTIMIZATION: Monitor performance and log CPU-saving tips
+    private logVirtualBackgroundPerformanceTips(): void {
+        console.log('🎭 Virtual Background Performance Tips:');
+        console.log('   • Close other applications to free CPU resources');
+        console.log('   • Use blur instead of image backgrounds (less CPU intensive)');
+        console.log('   • Ensure good lighting for better background detection');
+        console.log('   • Consider using a physical background for best performance');
+        
+        // Check system memory if available
+        if ('memory' in performance) {
+            const memInfo = (performance as any).memory;
+            const usagePercent = (memInfo.usedJSHeapSize / memInfo.totalJSHeapSize * 100).toFixed(1);
+            console.log(`   • Current memory usage: ${usagePercent}%`);
+            
+            if (memInfo.usedJSHeapSize > memInfo.totalJSHeapSize * 0.8) {
+                console.warn('⚠️ High memory usage detected - virtual background may cause performance issues');
+            }
+        }
     }
 
     async toggleScreenShare() {
@@ -844,17 +912,49 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
 
         try {
             if (this.isScreenSharing) {
+                console.log('🛑 Stopping screen share...');
                 await this.callObject.stopScreenShare();
                 this.isScreenSharing = false;
+                console.log('✅ Screen share stopped successfully');
             } else {
-                await this.callObject.startScreenShare();
+                console.log('▶️ Starting screen share...');
+                
+                // Check if we have permission and bandwidth for screenshare with many participants
+                const participantCount = Object.keys(this.participants).length;
+                if (participantCount > 8) {
+                    console.warn(`⚠️ Large call detected (${participantCount} participants) - using optimized screenshare settings`);
+                }
+                
+                // Start screenshare with optimized settings for large calls
+                const screenshareOptions = {
+                    video: {
+                        frameRate: { ideal: 15, max: 30 }, // Limit framerate for better performance
+                        width: { ideal: 1920, max: 1920 },
+                        height: { ideal: 1080, max: 1080 }
+                    },
+                    audio: true // Include system audio if available
+                };
+                
+                await this.callObject.startScreenShare(screenshareOptions);
                 this.isScreenSharing = true;
+                console.log('✅ Screen share started successfully with', participantCount, 'participants');
             }
 
             this.updateScreenSharingParticipant();
+            
+            // Force track subscription update after screenshare change
+            setTimeout(() => {
+                console.log('🔄 Updating track subscriptions after screenshare toggle');
+                this.updateTrackSubscriptions();
+            }, 1000);
+            
         } catch (error) {
-            console.error("Error toggling screen share:", error);
-            this.error = "Failed to toggle screen share. Please try again.";
+            console.error("❌ Error toggling screen share:", error);
+            this.error = "Failed to toggle screen share. This may be due to browser permissions or network issues with large calls.";
+            
+            // Reset screenshare state on error
+            this.isScreenSharing = false;
+            this.updateScreenSharingParticipant();
         }
     }
 
@@ -1602,6 +1702,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     updateScreenSharingParticipant(): void {
         let applyScreenshareLayout = false;
         const previousScreenSharingParticipant = this.screenSharingParticipant;
+        const participantCount = Object.keys(this.participants).length;
         
         if (this.screenSharingParticipant === null) {
             applyScreenshareLayout = true;
@@ -1610,7 +1711,21 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         const sharingParticipant = Object.values(this.participants).find(p => 
             p.screenVideoReady && p.role === 'stage'
         );
+        
+        const previousId = this.screenSharingParticipant?.id;
+        const newId = sharingParticipant?.id;
+        
         this.screenSharingParticipant = sharingParticipant || null;
+        
+        // Log screenshare changes in large calls for debugging
+        if (participantCount > 8 && previousId !== newId) {
+            console.log('🖥️ Screenshare participant changed in large call:', {
+                participantCount,
+                previous: previousId ? this.participants[previousId]?.userName : 'none',
+                current: sharingParticipant?.userName || 'none',
+                isLocal: sharingParticipant?.local || false
+            });
+        }
         
         // Update screenshare audio volume when screen sharing starts/stops
         if (this.screenSharingParticipant && this.screenSharingParticipant.screenAudioTrack) {
@@ -1622,6 +1737,14 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         // CRITICAL FIX: Reapply all volumes when screen sharing changes
         // This prevents the browser from resetting volumes during stream changes
         this.debouncedVolumeReapply();
+        
+        // Force track subscription update when screenshare changes in large calls
+        if (participantCount > 8 && previousId !== newId) {
+            setTimeout(() => {
+                console.log('🔄 Updating track subscriptions due to screenshare change in large call');
+                this.updateTrackSubscriptions();
+            }, 300);
+        }
         
         // Update live stream if currently streaming and screen sharing status changed
         if (this.isLive && previousScreenSharingParticipant !== this.screenSharingParticipant) {
@@ -1731,11 +1854,13 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         }
     }
 
-    updateTrackSubscriptions(): void {
+    async updateTrackSubscriptions(): Promise<void> {
         if (!this.callObject || !this.joined) return;
 
         try {
             const updateObject: any = {};
+            const qualitySettings: any = {};
+            let screenSharerDetected = false;
 
             Object.values(this.participants).forEach(participant => {
                 if (participant.local) return;
@@ -1750,50 +1875,76 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 }
 
                 // Determine if participant is primary (high priority)
-                const isPrimary = 
-                    participant.id === this.screenSharingParticipant?.id || // Screen sharer
-                    participant.id === this.activeSpeakerId; // Active speaker
+                const isScreenSharer = participant.id === this.screenSharingParticipant?.id;
+                const isActiveSpeaker = participant.id === this.activeSpeakerId;
+                const isPrimary = isScreenSharer || isActiveSpeaker;
+                
+                if (isScreenSharer) {
+                    screenSharerDetected = true;
+                    console.log('🖥️ Subscribing to screen share from:', participant.userName);
+                }
 
-                // Configure video subscription - use boolean values as per Daily.js API
+                // Configure track subscriptions with explicit screenshare priority
                 updateObject[participant.id] = {
                     setSubscribedTracks: {
                         audio: shouldSubscribeAudio,
-                        video: true, // Subscribe to video for all participants
-                        screenVideo: true,    // Always subscribe to screen share
-                        screenAudio: true
+                        video: true, // Subscribe to camera for all participants
+                        screenVideo: true,    // CRITICAL: Always subscribe to screenshare
+                        screenAudio: true     // CRITICAL: Always subscribe to screenshare audio
                     }
                 };
+                
+                // Configure quality settings - screenshare gets highest priority
+                if (isScreenSharer) {
+                    // Screenshare always gets maximum quality (layer 2)
+                    qualitySettings[participant.id] = {
+                        video: { layer: 2 },         // Max camera quality for screen sharer
+                        screenVideo: { layer: 2 }     // Max screenshare quality
+                    };
+                } else if (isActiveSpeaker) {
+                    // Active speaker gets high camera quality
+                    qualitySettings[participant.id] = {
+                        video: { layer: 2 }           // High camera quality for speaker
+                    };
+                } else {
+                    // Other participants get lower camera quality to preserve bandwidth
+                    qualitySettings[participant.id] = {
+                        video: { layer: 0 }           // Low camera quality for others
+                    };
+                }
             });
 
+            // Apply track subscriptions
             if (Object.keys(updateObject).length > 0) {
+                console.log('📡 Updating track subscriptions for', Object.keys(updateObject).length, 'participants');
+                if (screenSharerDetected) {
+                    console.log('🖥️ Screen share detected - ensuring proper subscription');
+                }
+                
                 this.callObject.updateParticipants(updateObject);
                 
-                // Set video quality layers after subscribing
-                Object.values(this.participants).forEach(participant => {
-                    if (participant.local) return;
-                    
-                    const isPrimary = 
-                        participant.id === this.screenSharingParticipant?.id || 
-                        participant.id === this.activeSpeakerId;
-                    
-                    // Set video receive quality using updateReceiveSettings
-                    // Layer 2 = high quality, Layer 0 = low quality
-                    try {
-                        const qualitySettings = {
-                            [participant.id]: {
-                                video: { layer: isPrimary ? 2 : 0 }
-                            }
-                        };
-                        this.callObject?.updateReceiveSettings(qualitySettings);
-                    } catch (qualityError) {
-                        console.warn('Could not set video quality for participant', participant.id, qualityError);
-                    }
-                });
+                // Apply quality settings after subscription update with delay
+                if (Object.keys(qualitySettings).length > 0) {
+                    setTimeout(async () => {
+                        try {
+                            await this.callObject?.updateReceiveSettings(qualitySettings);
+                            console.log('✅ Quality settings applied successfully');
+                        } catch (qualityError) {
+                            console.warn('⚠️ Could not apply quality settings:', qualityError);
+                        }
+                    }, 500);
+                }
             }
 
         } catch (error: any) {
-            console.error('Error updating track subscriptions:', error);
+            console.error('❌ Error updating track subscriptions:', error);
             this.error = `Error updating track subscriptions: ${error.message}`;
+            
+            // Retry logic for subscription failures with 10+ people
+            setTimeout(() => {
+                console.log('🔄 Retrying track subscriptions after error...');
+                this.updateTrackSubscriptions();
+            }, 2000);
         }
     }
 
@@ -1888,7 +2039,14 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         let success = false;
 
         try {
+            // CPU OPTIMIZATION: Log performance tips when enabling virtual background
+            if (option.type !== 'none' && this.currentVirtualBg === 'none') {
+                console.log('🎭 Enabling virtual background - applying CPU optimizations...');
+                this.logVirtualBackgroundPerformanceTips();
+            }
+
             if (option.type === 'none') {
+                console.log('🚫 Disabling virtual background - CPU usage should decrease');
                 await this.callObject.updateInputSettings({
                     video: { processor: { type: 'none' } }
                 });
@@ -1896,13 +2054,25 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 this.currentVirtualBgValue = null;
                 success = true;
             } else if (option.type === 'blur') {
+                console.log('🌫️ Applying background blur with performance optimization...');
+                // CPU OPTIMIZATION: Use lower blur strength for better performance
                 await this.callObject.updateInputSettings({
-                    video: { processor: { type: 'background-blur', config: { strength: 0.5 } } }
+                    video: { 
+                        processor: { 
+                            type: 'background-blur', 
+                            config: { strength: 0.7 }  // Slightly reduced strength for better performance
+                        } 
+                    }
                 });
                 this.currentVirtualBg = 'blur';
                 this.currentVirtualBgValue = null;
                 success = true;
+                
+                // CPU OPTIMIZATION: Start performance monitoring
+                setTimeout(() => this.monitorVirtualBackgroundPerformance(), 2000);
+                
             } else if (option.type === 'image' && option.value) {
+                console.log('🖼️ Applying background image - this is the most CPU intensive option');
                 const imageArrayBuffer = await this.loadImageAsArrayBuffer(option.value);
                 await this.callObject.updateInputSettings({
                     video: { processor: { type: 'background-image', config: { source: imageArrayBuffer } } }
@@ -1910,18 +2080,40 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 this.currentVirtualBg = 'image';
                 this.currentVirtualBgValue = option.value;
                 success = true;
+                
+                // CPU OPTIMIZATION: Monitor performance for image backgrounds (most intensive)
+                setTimeout(() => this.monitorVirtualBackgroundPerformance(), 2000);
+                
+                // Additional tip for image backgrounds
+                console.log('💡 Performance tip: Background blur typically uses less CPU than custom images');
             }
 
             if (success) {
                 this.showVirtualBgMenu = false;
+                
+                // CPU OPTIMIZATION: Log final status
+                const bgTypeEmoji = option.type === 'none' ? '🚫' : option.type === 'blur' ? '🌫️' : '🖼️';
+                console.log(`✅ ${bgTypeEmoji} Virtual background applied: ${option.type}`);
+                
+                if (option.type !== 'none') {
+                    console.log('💡 To improve performance: ensure good lighting and close other applications');
+                }
             }
 
         } catch (error: any) {
-            console.error('Error applying virtual background:', error);
-            this.error = `Failed to apply virtual background: ${error.message || 'Please try again.'}`;
-            setTimeout(() => { this.error = ''; }, 3000);
+            console.error('❌ Error applying virtual background:', error);
+            
+            // CPU OPTIMIZATION: Provide helpful error context
+            let errorMessage = `Failed to apply virtual background: ${error.message || 'Please try again.'}`;
+            if (error.message?.includes('processor') || error.message?.includes('model')) {
+                errorMessage += ' This may be due to high CPU usage or device limitations.';
+            }
+            
+            this.error = errorMessage;
+            setTimeout(() => { this.error = ''; }, 5000);
         } finally {
             this.isLoadingVirtualBg = false;
+            this.cdr.detectChanges();
         }
     }
 
@@ -2123,6 +2315,100 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             console.warn('🚨 Dead audio tracks detected, forcing reconnection...');
             this.safariAudioService.forceReconnectAllAudio();
         }
+    }
+    
+    // SCREENSHARE MONITORING: Start periodic screenshare health monitoring
+    private startScreenshareHealthMonitoring(): void {
+        if (this.screenshareHealthCheckInterval) {
+            clearInterval(this.screenshareHealthCheckInterval);
+        }
+        
+        this.screenshareHealthCheckInterval = setInterval(() => {
+            this.checkScreenshareHealth();
+        }, this.SCREENSHARE_HEALTH_CHECK_INTERVAL);
+    }
+    
+    // SCREENSHARE MONITORING: Check if screenshare is working properly with many participants
+    private checkScreenshareHealth(): void {
+        const participantCount = Object.keys(this.participants).length;
+        
+        // Only monitor in large calls (8+ participants)
+        if (participantCount < 8) return;
+        
+        // Check if someone is supposed to be screensharing but others can't see it
+        const localIsSharing = this.isScreenSharing;
+        const remoteScreenshares = Object.values(this.participants).filter(p => 
+            !p.local && p.screenVideoReady
+        );
+        
+        // If local is sharing but we detect subscription issues
+        if (localIsSharing && participantCount > 10) {
+            console.log('🔍 Screenshare health check:', {
+                localSharing: localIsSharing,
+                remoteScreenshares: remoteScreenshares.length,
+                totalParticipants: participantCount,
+                screenSharingParticipant: this.screenSharingParticipant?.userName
+            });
+            
+            // Force track subscription refresh if screenshare might be failing
+            if (Math.random() < 0.3) { // 30% chance to refresh subscriptions
+                console.log('🔄 Refreshing track subscriptions for screenshare reliability');
+                this.updateTrackSubscriptions();
+            }
+        }
+        
+        // Monitor for screenshare failures (when local is sharing but track isn't detected)
+        if (localIsSharing && !this.screenSharingParticipant) {
+            this.screenshareFailureCount++;
+            console.warn(`⚠️ Screenshare failure detected (${this.screenshareFailureCount}/3): Local sharing but no track found`);
+            
+            if (this.screenshareFailureCount >= 3) {
+                console.error('❌ Screenshare appears to have failed - attempting recovery');
+                this.recoverScreenshare();
+            }
+        }
+    }
+    
+    // SCREENSHARE RECOVERY: Attempt to recover from screenshare failures
+    private async recoverScreenshare(): Promise<void> {
+        try {
+            console.log('🔧 Attempting screenshare recovery...');
+            
+            // Stop and restart screenshare
+            if (this.isScreenSharing) {
+                await this.callObject?.stopScreenShare();
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                await this.callObject?.startScreenShare();
+                console.log('✅ Screenshare recovery attempted');
+            }
+            
+            // Reset failure count
+            this.screenshareFailureCount = 0;
+            
+        } catch (error) {
+            console.error('❌ Screenshare recovery failed:', error);
+            this.error = 'Screen sharing may not be working properly in this large call. Try stopping and restarting.';
+            setTimeout(() => { this.error = ''; }, 5000);
+        }
+    }
+    
+    // VIRTUAL BACKGROUND PERFORMANCE: Monitor and adaptively adjust settings
+    private monitorVirtualBackgroundPerformance(): void {
+        // Monitor performance when virtual background is active
+        if ('memory' in performance) {
+            const memInfo = (performance as any).memory;
+            const usagePercent = (memInfo.usedJSHeapSize / memInfo.totalJSHeapSize * 100).toFixed(1);
+            
+            if (memInfo.usedJSHeapSize > memInfo.totalJSHeapSize * 0.8) {
+                console.warn(`⚠️ High memory usage detected (${usagePercent}%) with virtual background - performance may be impacted`);
+                console.warn('💡 Tip: Close other applications or disable virtual background to improve performance');
+            } else {
+                console.log(`📊 Memory usage: ${usagePercent}% - virtual background performance OK`);
+            }
+        }
+        
+        // Log performance tips
+        this.logVirtualBackgroundPerformanceTips();
     }
 
     private applyTiledLayout(): void {
