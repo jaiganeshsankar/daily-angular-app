@@ -1197,7 +1197,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 const recordingOptions = {
                     layout: layoutOptions,
                     maxDuration: 86400, // 24 hours in seconds
-                    minIdleTimeOut: 60,  // Stop if empty/idle for 1 minute
+                    minIdleTimeOut: 86400,  // Stop if empty/idle for 24 hours
                     width: 1920,         // Full HD resolution
                     height: 1080
                 };
