@@ -362,12 +362,19 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             this.reCalculateLayoutData();
         }
 
-        // NEW: Handle layout change messages
-        if (e.data.type === 'LAYOUT_CHANGE' && e.data.layout) {
-            console.log(`Received layout change from ${e.fromId}: ${e.data.layout}`);
+        // Handle layout sync from existing participants to new participants
+        if (e.data.type === 'LAYOUT_SYNC' && e.data.layout) {
+            console.log(`📨 Received layout sync from ${e.fromId}: ${e.data.layout}`);
             this.selectedLayout = e.data.layout;
             this.reCalculateLayoutData();
-            // Force UI update to reflect layout change
+            this.cdr.detectChanges();
+        }
+        
+        // Handle regular layout changes from UI
+        if (e.data.type === 'LAYOUT_CHANGE' && e.data.layout) {
+            console.log(`📨 Received layout change from ${e.fromId}: ${e.data.layout}`);
+            this.selectedLayout = e.data.layout;
+            this.reCalculateLayoutData();
             this.cdr.detectChanges();
         }
         
@@ -658,6 +665,26 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         console.log(`👤 ${participant.userName} joined the call - Audio: ${participant.audioReady ? 'unmuted' : 'muted (default)'}`);
         
         this.addParticipant(e.participant);
+        
+        // SYNC LAYOUT: Only the first/oldest participant sends layout sync to avoid duplicates
+        setTimeout(() => {
+            if (this.callObject && this.selectedLayout !== VideoLayout.TILED) {
+                // Only send sync if we're the first participant (host/moderator)
+                const participantIds = Object.keys(this.participants);
+                const localId = this.callObject.participants().local.session_id;
+                const isFirstParticipant = participantIds.length > 0 && participantIds.sort()[0] === localId;
+                
+                if (isFirstParticipant) {
+                    this.callObject.sendAppMessage({
+                        type: 'LAYOUT_SYNC',
+                        layout: this.selectedLayout
+                    });
+                    console.log('🔄 [HOST] Synced layout to new participant:', this.selectedLayout);
+                } else {
+                    console.log('🔄 [PARTICIPANT] Not host - skipping layout sync');
+                }
+            }
+        }, 1000);
     };
 
     handleParticipantUpdated = async (e: DailyEventObjectParticipant | undefined) => {
@@ -879,6 +906,13 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         
         // Log audio state change for debugging
         console.log('🎤 Local audio toggled:', !audioReady ? 'unmuted' : 'muted');
+        
+        // DEBUG: Check if this should trigger active speaker change
+        if (!audioReady) {
+            console.log('🔍 Local participant unmuted - should become active speaker');
+        } else {
+            console.log('🔍 Local participant muted - active speaker may change');
+        }
     }
     
     // Helper method to get local participant's audio state
@@ -1529,29 +1563,8 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         // STRICT PARTICIPANT FILTERING FOR PRESENTATION LAYOUT
         let videoParticipants = stageParticipantIds;
 
-        if (this.selectedLayout === VideoLayout.PRESENTATION && this.screenSharingParticipant) {
-            // SCENARIO 1: The Screen Sharer is also the Active Speaker
-            if (this.activeSpeakerId && this.activeSpeakerId === this.screenSharingParticipant.id) {
-                // Send JUST the sharer's ID. 
-                // Daily VCS will put their Screen in the 'dominant' slot and their Camera in the sidebar.
-                videoParticipants = [this.screenSharingParticipant.id];
-            } 
-            // SCENARIO 2: A different person is speaking
-            else if (this.activeSpeakerId) {
-                // Send BOTH IDs: 
-                // 1. Sharer (for the screen)
-                // 2. Speaker (for the sidebar camera)
-                videoParticipants = [this.screenSharingParticipant.id, this.activeSpeakerId];
-            } 
-            // FALLBACK: No one is speaking
-            else {
-                videoParticipants = [this.screenSharingParticipant.id];
-            }
-            
-            // Essential logging removed to prevent CPU-killing log spam
-        }
-
-        const updateLayout = {
+        // Create the layout object
+        const updateLayout: any = {
             preset: 'custom' as const,
             participants: {
                 video: videoParticipants,
@@ -1623,6 +1636,12 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             }
         };
 
+        // PRESENTATION LAYOUT: Clean approach - use regular participant IDs
+        if (this.selectedLayout === VideoLayout.PRESENTATION) {
+            // Simple: Send all stage participants, let VCS handle the layout with preferScreenshare
+            updateLayout.participants.video = stageParticipantIds;
+        }
+
         return updateLayout;
     }
 
@@ -1670,31 +1689,41 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
 
     // Handle active speaker changes
     handleActiveSpeakerChange = (event: any): void => {
-        // Removed excessive logging - this fires constantly
+        // DEBUG: Log ALL active speaker events to see what we're getting
+        console.log('🔍 Active speaker event received:', {
+            event: event,
+            hasActiveSpeaker: !!(event && event.activeSpeaker),
+            peerId: event?.activeSpeaker?.peerId,
+            currentActiveSpeaker: this.activeSpeakerId
+        });
         
-        // Daily.js provides activeSpeaker.peerId for the active speaker
-        let newActiveSpeakerId: string | null = null;
+        // Daily.js fires this event with a peerId when someone speaks, 
+        // and usually with null/undefined when everyone stops talking (silence).
         
+        // STICKY BEHAVIOR: We only care if there is a valid peerId (someone is talking).
+        // We IGNORE silence to keep the last speaker visible in the presentation sidebar.
         if (event && event.activeSpeaker && event.activeSpeaker.peerId) {
-            newActiveSpeakerId = event.activeSpeaker.peerId;
-        }
-        
-        // Only update if the active speaker actually changed
-        if (this.activeSpeakerId !== newActiveSpeakerId) {
-            // Only log significant speaker changes occasionally
-            if (Math.random() < 0.2) {
-                console.log(`🎤 Active speaker: ${newActiveSpeakerId}`);
+            const newActiveSpeakerId = event.activeSpeaker.peerId;
+            console.log('🔍 Valid peerId found:', newActiveSpeakerId, 'Current:', this.activeSpeakerId);
+            
+            // Only update if the active speaker actually changed to a NEW person
+            if (this.activeSpeakerId !== newActiveSpeakerId) {
+                this.activeSpeakerId = newActiveSpeakerId;
+                console.log('🎤 Active speaker changed to:', this.activeSpeakerId);
+                
+                // Update track subscriptions to bump new speaker to high quality
+                this.updateTrackSubscriptions();
+                
+                // Trigger change detection to update the local UI sidebar immediately
+                this.cdr.detectChanges();
+                
+                // Update live stream layout so the stream also switches active speaker
+                this.updateLiveStreamLayout();
+            } else {
+                console.log('🔍 Same speaker - no change needed');
             }
-            this.activeSpeakerId = newActiveSpeakerId;
-            
-            // Update track subscriptions to bump new speaker to high quality
-            this.updateTrackSubscriptions();
-            
-            // Trigger change detection and update live stream layout for all layouts
-            this.cdr.detectChanges();
-            
-            // Update live stream layout for instant speaker switching (especially critical for Presentation layout)
-            this.updateLiveStreamLayout();
+        } else {
+            console.log('🔍 No valid peerId - ignoring (sticky behavior)');
         }
     };
 
@@ -2027,7 +2056,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                         await this.callObject!.updateLiveStreaming({ 
                             layout: newLayoutOptions 
                         });
-                        console.log('✅ Live stream layout updated for overlay change');
+                        console.log('✅ Live stream layout updated');
                         
                         // Sync recording layout update (if recording is enabled)
                         if (this.recordingEnabled) {
