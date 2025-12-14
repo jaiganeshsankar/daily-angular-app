@@ -1526,11 +1526,36 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             updateMode = 'dominant';
         }
 
+        // STRICT PARTICIPANT FILTERING FOR PRESENTATION LAYOUT
+        let videoParticipants = stageParticipantIds;
+
+        if (this.selectedLayout === VideoLayout.PRESENTATION && this.screenSharingParticipant) {
+            // SCENARIO 1: The Screen Sharer is also the Active Speaker
+            if (this.activeSpeakerId && this.activeSpeakerId === this.screenSharingParticipant.id) {
+                // Send JUST the sharer's ID. 
+                // Daily VCS will put their Screen in the 'dominant' slot and their Camera in the sidebar.
+                videoParticipants = [this.screenSharingParticipant.id];
+            } 
+            // SCENARIO 2: A different person is speaking
+            else if (this.activeSpeakerId) {
+                // Send BOTH IDs: 
+                // 1. Sharer (for the screen)
+                // 2. Speaker (for the sidebar camera)
+                videoParticipants = [this.screenSharingParticipant.id, this.activeSpeakerId];
+            } 
+            // FALLBACK: No one is speaking
+            else {
+                videoParticipants = [this.screenSharingParticipant.id];
+            }
+            
+            // Essential logging removed to prevent CPU-killing log spam
+        }
+
         const updateLayout = {
             preset: 'custom' as const,
             participants: {
-                video: stageParticipantIds,
-                audio: stageParticipantIds
+                video: videoParticipants,
+                audio: stageParticipantIds // Keep all stage participants for audio
             },
             composition_params: {
                 mode: updateMode,
@@ -1547,9 +1572,15 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                     'videoSettings.showParticipantLabels': true
                 }),
                 ...(this.selectedLayout === VideoLayout.PRESENTATION && {
-                    'videoSettings.dominant.position': 'left',
-                    'videoSettings.dominant.splitPos': 0.8,
-                    'videoSettings.showParticipantLabels': true
+                    'videoSettings.dominant.position': 'left',           // Screen on left, sidebar on right
+                    'videoSettings.dominant.splitPos': 0.8,              // 80/20 split
+                    'videoSettings.followDomFlag': true,
+                    'videoSettings.maxCamStreams': 2,                    // Allow exactly 2 streams: 1 Screen + 1 Camera
+                    'videoSettings.scaleMode': 'fill',
+                    'videoSettings.dominant.numChiclets': 1,             // Force exactly 1 sidebar tile
+                    'videoSettings.showParticipantLabels': true,         // Show participant names
+                    'videoSettings.preferScreenshare': true,             // Ensure screen takes dominant position
+                    'showParticipantLabels': true                        // Additional label enforcement
                 }),
                 ...(this.selectedLayout === VideoLayout.PINNED_VERTICAL && {
                     'videoSettings.dominant.position': 'top',
@@ -1659,12 +1690,11 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             // Update track subscriptions to bump new speaker to high quality
             this.updateTrackSubscriptions();
             
-            // Trigger change detection for presentation layout
-            if (this.selectedLayout === VideoLayout.PRESENTATION) {
-                this.cdr.detectChanges();
-                // Update live stream layout for instant speaker switching
-                this.updateLiveStreamLayout();
-            }
+            // Trigger change detection and update live stream layout for all layouts
+            this.cdr.detectChanges();
+            
+            // Update live stream layout for instant speaker switching (especially critical for Presentation layout)
+            this.updateLiveStreamLayout();
         }
     };
 
@@ -1989,10 +2019,8 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     // NEW: Helper method to update live stream layout
     private updateLiveStreamLayout(): void {
         if (this.isLive && this.callObject) {
-            console.log('🔄 Live stream is active - updating layout due to overlay change...');
             try {
                 const newLayoutOptions = this.getStreamingLayoutOptionsForUpdate();
-                console.log('🔄 Updating live stream with new overlay layout:', newLayoutOptions);
                 
                 (async () => {
                     try {
