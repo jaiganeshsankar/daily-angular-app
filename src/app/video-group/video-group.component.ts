@@ -660,31 +660,22 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     participantJoined = (e: DailyEventObjectParticipant | undefined) => {
         if (!e) return;
         console.log(e.action);
-        
+
         const participant = this.formatParticipantObj(e.participant);
         console.log(`👤 ${participant.userName} joined the call - Audio: ${participant.audioReady ? 'unmuted' : 'muted (default)'}`);
-        
+
         this.addParticipant(e.participant);
         
-        // SYNC LAYOUT: Only the first/oldest participant sends layout sync to avoid duplicates
-        setTimeout(() => {
-            if (this.callObject && this.selectedLayout !== VideoLayout.TILED) {
-                // Only send sync if we're the first participant (host/moderator)
-                const participantIds = Object.keys(this.participants);
-                const localId = this.callObject.participants().local.session_id;
-                const isFirstParticipant = participantIds.length > 0 && participantIds.sort()[0] === localId;
-                
-                if (isFirstParticipant) {
-                    this.callObject.sendAppMessage({
-                        type: 'LAYOUT_SYNC',
-                        layout: this.selectedLayout
-                    });
-                    console.log('🔄 [HOST] Synced layout to new participant:', this.selectedLayout);
-                } else {
-                    console.log('🔄 [PARTICIPANT] Not host - skipping layout sync');
-                }
-            }
-        }, 1000);
+        // Simple layout sync: Send current layout to new participant if it's not default
+        if (this.callObject && this.selectedLayout !== VideoLayout.TILED) {
+            setTimeout(() => {
+                this.callObject?.sendAppMessage({
+                    type: 'LAYOUT_SYNC',
+                    layout: this.selectedLayout
+                }, e.participant.session_id);
+                console.log('🔄 Synced layout to new participant:', this.selectedLayout);
+            }, 100);
+        }
     };
 
     handleParticipantUpdated = async (e: DailyEventObjectParticipant | undefined) => {
@@ -1716,9 +1707,6 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 
                 // Trigger change detection to update the local UI sidebar immediately
                 this.cdr.detectChanges();
-                
-                // Update live stream layout so the stream also switches active speaker
-                this.updateLiveStreamLayout();
             } else {
                 console.log('🔍 Same speaker - no change needed');
             }
