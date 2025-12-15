@@ -1208,7 +1208,13 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 endpoints: [{
                     endpoint: 'rtmps://global-live.mux.com:443/app/e0e94784-65e3-51d8-caeb-d63bd898eca9'
                 }],
-                layout: layoutOptions
+                layout: layoutOptions,
+                // HIGH QUALITY: Enhanced video settings
+                width: 1920,           // Full HD width
+                height: 1080,          // Full HD height  
+                fps: 30,               // Smooth 30fps
+                videoBitrate: 6000,    // 6 Mbps for high quality
+                audioBitrate: 320      // High quality audio
             };
             
             console.log('🎥 Live streaming config:', streamingConfig);
@@ -1223,8 +1229,13 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                     layout: layoutOptions,
                     maxDuration: 86400, // 24 hours in seconds
                     minIdleTimeOut: 86400,  // Stop if empty/idle for 24 hours
-                    width: 1920,         // Full HD resolution
-                    height: 1080
+                    // HIGH QUALITY: Enhanced recording settings
+                    width: 1920,           // Full HD width
+                    height: 1080,          // Full HD height
+                    fps: 30,               // Smooth 30fps
+                    videoBitrate: 8000,    // 8 Mbps for premium recording quality
+                    audioBitrate: 320,     // High quality audio
+                    videoCodec: 'H264'     // Efficient, high-quality codec
                 };
                 
                 console.log('🎥 Starting cloud recording with config:', recordingOptions);
