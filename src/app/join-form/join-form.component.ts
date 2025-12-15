@@ -14,7 +14,7 @@ export class JoinFormComponent {
     // Add Validators.required
     name: ["", Validators.required],
     // Add Validators.required and Validators.pattern
-    url: ["https://townhall-prod.daily.co/Bi4tAOY2FEK5gi5nYKme", [Validators.required, Validators.pattern("https://.+\\.daily\.co/.+")]],
+    url: ["https://townhall-prod.daily.co/yes", [Validators.required, Validators.pattern("https://.+\\.daily\\.co/.+")]],
   });
 
   constructor(private formBuilder: FormBuilder) { }

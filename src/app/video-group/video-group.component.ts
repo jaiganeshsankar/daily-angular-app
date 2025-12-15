@@ -255,7 +255,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             await this.callObject.join({
                 userName: this.userName,
                 url: this.dailyRoomUrl,
-                token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyIjoiQmk0dEFPWTJGRUs1Z2k1bllLbWUiLCJvIjp0cnVlLCJzcyI6dHJ1ZSwiZCI6Ijg3YmEzM2JiLWQ3YjAtNDA5OC1iMGVmLWNkYWFjMDg1MTc2MCIsImlhdCI6MTc2MTY2ODI3MX0.caecSEIZwos2YZV0NbHI2NoeN-IVCgdbAuju2bWTmKg',
+                token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJvIjp0cnVlLCJkIjoiODdiYTMzYmItZDdiMC00MDk4LWIwZWYtY2RhYWMwODUxNzYwIiwiaWF0IjoxNzY1Nzc2Mjg3fQ.pm0ySijLHbQ7kcc5hT57pbbzYlNfh-f7yhLvHADjw7I',
                 startAudioOff: true,   // Start with audio muted by default
                 startVideoOff: false
             });
@@ -1206,7 +1206,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             
             const streamingConfig = {
                 endpoints: [{
-                    endpoint: 'rtmps://global-live.mux.com:443/app/e0e94784-65e3-51d8-caeb-d63bd898eca9'
+                    endpoint: 'rtmps://global-live.mux.com:443/app/0426ffe9-0916-b3f0-55eb-c8adf5324167'
                 }],
                 layout: layoutOptions,
                 // HIGH QUALITY: Enhanced video settings
@@ -1458,23 +1458,25 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 layout.composition_params['videoSettings.dominant.splitMargin_gu'] = 0;
                 layout.composition_params['videoSettings.showParticipantLabels'] = true;
             } else if (this.selectedLayout === VideoLayout.PRESENTATION) {
-                // Presentation layout: 80/20 split with screenshare dominant, active speaker in right sidebar
+                // STICKY ACTIVE SPEAKER: Presentation layout with sticky behavior
                 layout.composition_params['mode'] = 'dominant';
                 layout.composition_params['videoSettings.dominant.position'] = 'left'; // Screenshare on left (80%)
                 layout.composition_params['videoSettings.dominant.splitPos'] = 0.8; // 80/20 split
-                layout.composition_params['videoSettings.maxCamStreams'] = 1; // Only one tile in sidebar
-                layout.composition_params['videoSettings.omitAudioOnly'] = true;
-                layout.composition_params['videoSettings.showParticipantLabels'] = true; // Show names for tracking
-                layout.composition_params['videoSettings.prioritizeScreenshare'] = true; // Ensure screenshare gets priority
-                layout.composition_params['videoSettings.dominant.followDomFlag'] = false; // Don't auto-switch dominant
+                layout.composition_params['videoSettings.followDomFlag'] = true; // STICKY: Follow dominant speaker
+                layout.composition_params['videoSettings.dominant.followDomFlag'] = true; // STICKY: Enable sticky behavior
+                layout.composition_params['videoSettings.maxCamStreams'] = 2; // Screen + 1 camera
+                layout.composition_params['videoSettings.dominant.numChiclets'] = 1; // STICKY: Only 1 sidebar tile
+                layout.composition_params['videoSettings.omitMutedVideo'] = false; // STICKY: Show muted participants
+                layout.composition_params['videoSettings.showParticipantLabels'] = true; // Show names
+                layout.composition_params['videoSettings.preferScreenshare'] = true; // Screen takes priority
+                layout.composition_params['videoSettings.scaleMode'] = 'fill';
                 
-                // Presentation layout relies on VCS automatic screenshare prioritization
-                // We've filtered the participants list above to only include the active speaker for sidebar
-                console.log('📡 Presentation layout - using VCS auto-screenshare with active speaker:', {
+                console.log('📡 STICKY ACTIVE SPEAKER: Presentation layout configured:', {
                     screenSharer: this.screenSharingParticipant?.userName,
-                    sidebarParticipant: initialVideoParticipants.map(id => this.participants[id]?.userName),
-                    showingBothTracksForSamePerson: this.activeSpeakerId === this.screenSharingParticipant?.id,
-                    maxCamStreams: layout.composition_params['videoSettings.maxCamStreams']
+                    activeSpeaker: this.activeSpeakerId ? this.participants[this.activeSpeakerId]?.userName : 'none',
+                    followDomFlag: true,
+                    numChiclets: 1,
+                    stickyBehavior: 'enabled'
                 });
             }
             
@@ -1589,13 +1591,15 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 ...(this.selectedLayout === VideoLayout.PRESENTATION && {
                     'videoSettings.dominant.position': 'left',           // Screen on left, sidebar on right
                     'videoSettings.dominant.splitPos': 0.8,              // 80/20 split
-                    'videoSettings.followDomFlag': true,
+                    'videoSettings.followDomFlag': true,                 // STICKY: Follow dominant speaker
+                    'videoSettings.dominant.followDomFlag': true,        // STICKY: Enable sticky active speaker behavior
                     'videoSettings.maxCamStreams': 2,                    // Allow exactly 2 streams: 1 Screen + 1 Camera
                     'videoSettings.scaleMode': 'fill',
-                    'videoSettings.dominant.numChiclets': 1,             // Force exactly 1 sidebar tile
+                    'videoSettings.dominant.numChiclets': 1,             // STICKY: Force exactly 1 sidebar tile
                     'videoSettings.showParticipantLabels': true,         // Show participant names
                     'videoSettings.preferScreenshare': true,             // Ensure screen takes dominant position
-                    'showParticipantLabels': true                        // Additional label enforcement
+                    'showParticipantLabels': true,                       // Additional label enforcement
+                    'videoSettings.omitMutedVideo': false               // STICKY: Show muted participants (for silence periods)
                 }),
                 ...(this.selectedLayout === VideoLayout.PINNED_VERTICAL && {
                     'videoSettings.dominant.position': 'top',
