@@ -554,7 +554,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             if (existingParticipant.screenVideoReady !== currentParticipantCopy.screenVideoReady) {
                 existingParticipant.screenVideoReady = currentParticipantCopy.screenVideoReady;
             }
-            if (currentParticipantCopy.screenVideoReady && existingParticipant.screenVideoTrack?.id !== currentParticipantCopy.videoTrack?.id) {
+            if (currentParticipantCopy.screenVideoReady && existingParticipant.screenVideoTrack?.id !== currentParticipantCopy.screenVideoTrack?.id) {
                 existingParticipant.screenVideoTrack = currentParticipantCopy.screenVideoTrack;
             }
             return;
@@ -951,10 +951,10 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                     console.warn(`⚠️ Large call detected (${participantCount} participants) - using optimized screenshare settings`);
                 }
                 
-                // Start screenshare with optimized settings for large calls
+                // Start screenshare with high-quality settings for better recording
                 const screenshareOptions = {
                     video: {
-                        frameRate: { ideal: 15, max: 30 }, // Limit framerate for better performance
+                        frameRate: { ideal: 60, max: 60 }, // High framerate for smooth recording
                         width: { ideal: 1920, max: 1920 },
                         height: { ideal: 1080, max: 1080 }
                     },
@@ -962,6 +962,14 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 };
                 
                 await this.callObject.startScreenShare(screenshareOptions);
+                
+                // CRITICAL FIX: Set motion-optimized preset for smooth 30fps screen share
+                // This overrides Daily's default screen share preset that caps at 5-15fps
+                await this.callObject.updateSendSettings({
+                    screenVideo: 'motion-optimized'  // Enables up to 30fps for screen share
+                });
+                
+                console.log('🎯 Screen share send settings updated to motion-optimized for smooth fps');
                 this.isScreenSharing = true;
                 console.log('✅ Screen share started successfully with', participantCount, 'participants');
             }
@@ -1215,7 +1223,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 width: 1920,           // Full HD width
                 height: 1080,          // Full HD height  
                 fps: 30,               // Smooth 30fps
-                videoBitrate: 6000,    // 6 Mbps for high quality
+                videoBitrate: 6000,    // 6 Mbps for high quality 30fps
                 audioBitrate: 320      // High quality audio
             };
             
@@ -1235,7 +1243,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                     width: 1920,           // Full HD width
                     height: 1080,          // Full HD height
                     fps: 30,               // Smooth 30fps
-                    videoBitrate: 8000,    // 8 Mbps for premium recording quality
+                    videoBitrate: 8000,    // 8 Mbps for premium 30fps recording
                     audioBitrate: 320,     // High quality audio
                     videoCodec: 'H264'     // Efficient, high-quality codec
                 };
@@ -1424,15 +1432,13 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
 
         // Add mode-specific VCS parameters
         if (vcsMode === 'single') {
-            // Full Screen layout - single mode for screenshare only
+            // Full Screen layout - single mode for screenshare only (simplified approach)
             layout.composition_params['videoSettings.preferScreenshare'] = true;
             layout.composition_params['videoSettings.maxCamStreams'] = 1;
             layout.composition_params['videoSettings.omitAudioOnly'] = true;
             layout.composition_params['videoSettings.showParticipantLabels'] = true;
-            if (this.screenSharingParticipant) {
-                // Override participants to show only screenshare
-                layout.participants.video = [{ session_id: this.screenSharingParticipant.id, trackName: 'screenVideo' }];
-            }
+            // Use simple participant list instead of explicit track specification
+            // VCS will automatically prefer screenshare when preferScreenshare=true
         } else if (vcsMode === 'dominant') {
             layout.composition_params['videoSettings.preferScreenshare'] = true;
             layout.composition_params['videoSettings.maxCamStreams'] = stageParticipantIds.length;
