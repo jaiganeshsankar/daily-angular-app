@@ -255,7 +255,8 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             await this.callObject.join({
                 userName: this.userName,
                 url: this.dailyRoomUrl,
-                token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJvIjp0cnVlLCJkIjoiODdiYTMzYmItZDdiMC00MDk4LWIwZWYtY2RhYWMwODUxNzYwIiwiaWF0IjoxNzY1Nzc2Mjg3fQ.pm0ySijLHbQ7kcc5hT57pbbzYlNfh-f7yhLvHADjw7I',
+                token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyIjoiQmk0dEFPWTJGRUs1Z2k1bllLbWUiLCJvIjp0cnVlLCJzcyI6dHJ1ZSwiZCI6Ijg3YmEzM2JiLWQ3YjAtNDA5OC1iMGVmLWNkYWFjMDg1MTc2MCIsImlhdCI6MTc2MTY2ODI3MX0.caecSEIZwos2YZV0NbHI2NoeN-IVCgdbAuju2bWTmKg',
+                // token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJvIjp0cnVlLCJkIjoiODdiYTMzYmItZDdiMC00MDk4LWIwZWYtY2RhYWMwODUxNzYwIiwiaWF0IjoxNzY1Nzc2Mjg3fQ.pm0ySijLHbQ7kcc5hT57pbbzYlNfh-f7yhLvHADjw7I',
                 startAudioOff: true,   // Start with audio muted by default
                 startVideoOff: false
             });
@@ -1206,7 +1207,8 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
             
             const streamingConfig = {
                 endpoints: [{
-                    endpoint: 'rtmps://global-live.mux.com:443/app/0426ffe9-0916-b3f0-55eb-c8adf5324167'
+                    endpoint: 'rtmps://global-live.mux.com:443/app/e0e94784-65e3-51d8-caeb-d63bd898eca9'
+                    // endpoint: 'rtmps://global-live.mux.com:443/app/0426ffe9-0916-b3f0-55eb-c8adf5324167'
                 }],
                 layout: layoutOptions,
                 // HIGH QUALITY: Enhanced video settings
