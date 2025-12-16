@@ -1929,7 +1929,6 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
 
         try {
             const updateObject: any = {};
-            const qualitySettings: any = {};
             let screenSharerDetected = false;
 
             Object.values(this.participants).forEach(participant => {
@@ -1944,10 +1943,8 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                     shouldSubscribeAudio = participant.role === 'stage';
                 }
 
-                // Determine if participant is primary (high priority)
+                // Determine if participant is screen sharing
                 const isScreenSharer = participant.id === this.screenSharingParticipant?.id;
-                const isActiveSpeaker = participant.id === this.activeSpeakerId;
-                const isPrimary = isScreenSharer || isActiveSpeaker;
                 
                 if (isScreenSharer) {
                     screenSharerDetected = true;
@@ -1963,28 +1960,9 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                         screenAudio: true     // CRITICAL: Always subscribe to screenshare audio
                     }
                 };
-                
-                // Configure quality settings - screenshare gets highest priority
-                if (isScreenSharer) {
-                    // Screenshare always gets maximum quality (layer 2)
-                    qualitySettings[participant.id] = {
-                        video: { layer: 2 },         // Max camera quality for screen sharer
-                        screenVideo: { layer: 2 }     // Max screenshare quality
-                    };
-                } else if (isActiveSpeaker) {
-                    // Active speaker gets high camera quality
-                    qualitySettings[participant.id] = {
-                        video: { layer: 2 }           // High camera quality for speaker
-                    };
-                } else {
-                    // Other participants get lower camera quality to preserve bandwidth
-                    qualitySettings[participant.id] = {
-                        video: { layer: 0 }           // Low camera quality for others
-                    };
-                }
             });
 
-            // Apply track subscriptions
+            // Apply track subscriptions - let Daily.co's ABR handle quality automatically
             if (Object.keys(updateObject).length > 0) {
                 console.log('📡 Updating track subscriptions for', Object.keys(updateObject).length, 'participants');
                 if (screenSharerDetected) {
@@ -1992,18 +1970,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 }
                 
                 this.callObject.updateParticipants(updateObject);
-                
-                // Apply quality settings after subscription update with delay
-                if (Object.keys(qualitySettings).length > 0) {
-                    setTimeout(async () => {
-                        try {
-                            await this.callObject?.updateReceiveSettings(qualitySettings);
-                            console.log('✅ Quality settings applied successfully');
-                        } catch (qualityError) {
-                            console.warn('⚠️ Could not apply quality settings:', qualityError);
-                        }
-                    }, 500);
-                }
+                console.log('✅ Track subscriptions updated - relying on Daily.co ABR for quality management');
             }
 
         } catch (error: any) {
