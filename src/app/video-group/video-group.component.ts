@@ -1207,7 +1207,10 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 joined: this.joined,
                 participants: Object.keys(this.participants).length,
                 localParticipant: localParticipant,
-                permissions: localParticipant?.permissions
+                permissions: localParticipant?.permissions,
+                activeSpeakerId: this.activeSpeakerId,
+                activeSpeakerName: this.activeSpeakerId ? this.participants[this.activeSpeakerId]?.userName : 'none',
+                screenSharingParticipant: this.screenSharingParticipant?.userName || 'none'
             });
 
             // Get layout options using the new helper method
@@ -1358,10 +1361,19 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 initialVideoParticipants = [this.activeSpeakerId];
                 console.log('📡 GUARANTEED 1 tile: Using active speaker for sidebar:', this.participants[this.activeSpeakerId]?.userName);
             } else {
-                // No active speaker - use any ONE stage participant
-                initialVideoParticipants = stageParticipantIds.length > 0 ? [stageParticipantIds[0]] : [];
-                console.log('📡 GUARANTEED 1 tile: No active speaker - using first stage participant:', 
-                    stageParticipantIds.length > 0 ? this.participants[stageParticipantIds[0]]?.userName : 'none');
+                // No active speaker - prefer someone OTHER than the screensharer for the sidebar
+                const nonScreenSharerParticipants = stageParticipantIds.filter(id => id !== this.screenSharingParticipant?.id);
+                if (nonScreenSharerParticipants.length > 0) {
+                    // Use first non-screensharer stage participant
+                    initialVideoParticipants = [nonScreenSharerParticipants[0]];
+                    console.log('📡 GUARANTEED 1 tile: No active speaker - using first non-screensharer stage participant:', 
+                        this.participants[nonScreenSharerParticipants[0]]?.userName);
+                } else {
+                    // Only the screensharer is on stage - use them (better than empty sidebar)
+                    initialVideoParticipants = stageParticipantIds.length > 0 ? [stageParticipantIds[0]] : [];
+                    console.log('📡 GUARANTEED 1 tile: Only screensharer on stage - using them:', 
+                        stageParticipantIds.length > 0 ? this.participants[stageParticipantIds[0]]?.userName : 'none');
+                }
             }
             
             console.log('📡 Presentation layout - filtering initial participants:', {
@@ -1469,7 +1481,7 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 // STICKY ACTIVE SPEAKER: Presentation layout with sticky behavior
                 layout.composition_params['mode'] = 'dominant';
                 layout.composition_params['videoSettings.dominant.position'] = 'left'; // Screenshare on left (80%)
-                layout.composition_params['videoSettings.dominant.splitPos'] = 0.8; // 80/20 split
+                layout.composition_params['videoSettings.dominant.splitPos'] = 0.7; // 80/20 split
                 layout.composition_params['videoSettings.followDomFlag'] = true; // STICKY: Follow dominant speaker
                 layout.composition_params['videoSettings.dominant.followDomFlag'] = true; // STICKY: Enable sticky behavior
                 layout.composition_params['videoSettings.maxCamStreams'] = 2; // Screen + 1 camera
@@ -1479,9 +1491,18 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
                 layout.composition_params['videoSettings.preferScreenshare'] = true; // Screen takes priority
                 layout.composition_params['videoSettings.scaleMode'] = 'fill';
                 
+                // CRITICAL FIX: Explicitly set the current active speaker as dominant
+                // This ensures the VCS starts with the correct person in the sidebar
+                if (this.activeSpeakerId && this.participants[this.activeSpeakerId]) {
+                    layout.composition_params['videoSettings.dominant.participantId'] = this.activeSpeakerId;
+                    console.log('🎯 EXPLICIT DOMINANT: Setting active speaker as initial dominant participant:', 
+                        this.participants[this.activeSpeakerId].userName);
+                }
+                
                 console.log('📡 STICKY ACTIVE SPEAKER: Presentation layout configured:', {
                     screenSharer: this.screenSharingParticipant?.userName,
                     activeSpeaker: this.activeSpeakerId ? this.participants[this.activeSpeakerId]?.userName : 'none',
+                    explicitDominant: this.activeSpeakerId || 'none',
                     followDomFlag: true,
                     numChiclets: 1,
                     stickyBehavior: 'enabled'
@@ -1701,40 +1722,21 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         }
     }
 
-    // Handle active speaker changes
+    // Handle active speaker changes with sticky behavior
     handleActiveSpeakerChange = (event: any): void => {
-        // DEBUG: Log ALL active speaker events to see what we're getting
-        console.log('🔍 Active speaker event received:', {
-            event: event,
-            hasActiveSpeaker: !!(event && event.activeSpeaker),
-            peerId: event?.activeSpeaker?.peerId,
-            currentActiveSpeaker: this.activeSpeakerId
-        });
-        
-        // Daily.js fires this event with a peerId when someone speaks, 
-        // and usually with null/undefined when everyone stops talking (silence).
-        
-        // STICKY BEHAVIOR: We only care if there is a valid peerId (someone is talking).
-        // We IGNORE silence to keep the last speaker visible in the presentation sidebar.
+        // Only update if there's a valid peerId (ignore silence for sticky behavior)
         if (event && event.activeSpeaker && event.activeSpeaker.peerId) {
-            const newActiveSpeakerId = event.activeSpeaker.peerId;
-            console.log('🔍 Valid peerId found:', newActiveSpeakerId, 'Current:', this.activeSpeakerId);
-            
-            // Only update if the active speaker actually changed to a NEW person
-            if (this.activeSpeakerId !== newActiveSpeakerId) {
-                this.activeSpeakerId = newActiveSpeakerId;
+            // Only update if the active speaker actually changed
+            if (this.activeSpeakerId !== event.activeSpeaker.peerId) {
+                this.activeSpeakerId = event.activeSpeaker.peerId;
                 console.log('🎤 Active speaker changed to:', this.activeSpeakerId);
                 
-                // Update track subscriptions to bump new speaker to high quality
+                // Update track subscriptions for the new active speaker
                 this.updateTrackSubscriptions();
                 
-                // Trigger change detection to update the local UI sidebar immediately
+                // Trigger change detection to update the UI
                 this.cdr.detectChanges();
-            } else {
-                console.log('🔍 Same speaker - no change needed');
             }
-        } else {
-            console.log('🔍 No valid peerId - ignoring (sticky behavior)');
         }
     };
 
