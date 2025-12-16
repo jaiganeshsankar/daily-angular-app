@@ -7,36 +7,172 @@
     <div *ngIf="error">
         <error-message [error]="error" (reset)="leaveCall()"></error-message>
     </div>
-    <!-- Virtual Background Menu -->
-    <div *ngIf="showVirtualBgMenu && joined" class="virtual-bg-overlay" (click)="toggleVirtualBgMenu()">
-        <div class="virtual-bg-menu" (click)="$event.stopPropagation()">
-            <div class="virtual-bg-header">
-                <h3>Virtual Background</h3>
-                <button class="close-btn" (click)="toggleVirtualBgMenu()">×</button>
+    <!-- Settings Modal -->
+    <div *ngIf="showSettingsModal && joined" class="settings-overlay" (click)="closeSettingsModal()">
+        <div class="settings-modal" (click)="$event.stopPropagation()">
+            <div class="settings-header">
+                <h2>Settings</h2>
+                <button class="close-btn" (click)="closeSettingsModal()">×</button>
             </div>
-            <div *ngIf="isLoadingVirtualBg" class="loading-overlay">
-                <div class="spinner"></div>
-                <p>Applying background...</p>
+            
+            <!-- Tab Navigation -->
+            <div class="settings-tabs">
+                <button class="tab-btn" 
+                        [class.active]="activeSettingsTab === 'video'"
+                        (click)="switchSettingsTab('video')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M17 10.5V7a1 1 0 0 0-1-1H4a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-3.5l4 4v-11l-4 4z"/>
+                    </svg>
+                    Video
+                </button>
+                <button class="tab-btn" 
+                        [class.active]="activeSettingsTab === 'audio'"
+                        (click)="switchSettingsTab('audio')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                        <line x1="12" y1="19" x2="12" y2="23"/>
+                        <line x1="8" y1="23" x2="16" y2="23"/>
+                    </svg>
+                    Audio
+                </button>
+                <button class="tab-btn" 
+                        [class.active]="activeSettingsTab === 'virtualBg'"
+                        (click)="switchSettingsTab('virtualBg')">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M21 19V5c0-1.1-.9-2-2-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2zM8.5 13.5l2.5 3.01L14.5 12l4.5 6H5l3.5-4.5z"/>
+                    </svg>
+                    Background
+                </button>
             </div>
-            <div class="virtual-bg-options" [class.loading]="isLoadingVirtualBg">
-                <div *ngFor="let option of virtualBackgroundOptions" class="virtual-bg-option"
-                    [class.active]="(option.type === 'none' && currentVirtualBg === 'none') || (option.type === 'blur' && currentVirtualBg === 'blur') || (option.type === 'image' && currentVirtualBg === 'image' && option.value === currentVirtualBgValue)"
-                    (click)="applyVirtualBackground(option)">
-                    <div class="option-preview">
-                        <img *ngIf="option.thumbnail" [src]="option.thumbnail" [alt]="option.label">
-                        <div *ngIf="option.type === 'blur'" class="blur-preview">
-                            <div class="blur-circle"></div>
-                        </div>
-                        <div *ngIf="option.type === 'none'" class="none-preview">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"
-                                fill="none" stroke="currentColor" stroke-width="2">
-                                <line x1="18" y1="6" x2="6" y2="18"></line>
-                                <line x1="6" y1="6" x2="18" y2="18"></line>
-                            </svg>
+            
+            <!-- Tab Content -->
+            <div class="settings-content">
+                
+                <!-- Video Tab -->
+                <div *ngIf="activeSettingsTab === 'video'" class="tab-content video-tab">
+                    <div class="settings-row">
+                        <label class="settings-label">Camera Source</label>
+                        <select class="settings-select" 
+                                [value]="pendingVideoDeviceId" 
+                                (change)="onVideoDeviceChange($event)">
+                            <option value="">Default Camera</option>
+                            <option *ngFor="let device of availableVideoDevices" 
+                                    [value]="device.deviceId">
+                                {{ device.label || 'Camera ' + (availableVideoDevices.indexOf(device) + 1) }}
+                            </option>
+                        </select>
+                    </div>
+                    
+                    <div class="settings-row">
+                        <label class="settings-label">Preview</label>
+                        <div class="video-preview-container small">
+                            <video id="settingsVideoPreview" 
+                                   class="video-preview" 
+                                   [class.mirrored]="pendingMirror"
+                                   autoplay 
+                                   muted>
+                            </video>
                         </div>
                     </div>
-                    <span class="option-label">{{ option.label }}</span>
+                    
+                    <div class="settings-row">
+                        <label class="settings-checkbox">
+                            <input type="checkbox" 
+                                   [checked]="pendingMirror" 
+                                   (change)="onMirrorToggle()">
+                            <span class="checkmark"></span>
+                            Mirror my video
+                        </label>
+                    </div>
                 </div>
+                
+                <!-- Audio Tab -->
+                <div *ngIf="activeSettingsTab === 'audio'" class="tab-content audio-tab">
+                    <div class="settings-row">
+                        <label class="settings-label">Microphone Source</label>
+                        <select class="settings-select" 
+                                [value]="pendingAudioDeviceId" 
+                                (change)="onAudioDeviceChange($event)">
+                            <option value="">Default Microphone</option>
+                            <option *ngFor="let device of availableAudioDevices" 
+                                    [value]="device.deviceId">
+                                {{ device.label || 'Microphone ' + (availableAudioDevices.indexOf(device) + 1) }}
+                            </option>
+                        </select>
+                    </div>
+                    
+                    <div class="settings-row">
+                        <label class="settings-label">Input Level</label>
+                        <div class="audio-meter-container">
+                            <div class="audio-meter">
+                                <div class="audio-level" 
+                                     [style.width.%]="currentAudioLevel * 100">
+                                </div>
+                            </div>
+                            <span class="audio-level-text">
+                                {{ (currentAudioLevel * 100).toFixed(0) }}%
+                            </span>
+                        </div>
+                        <p class="audio-meter-help">Speak normally to test your microphone level</p>
+                    </div>
+                </div>
+                
+                <!-- Virtual Background Tab -->
+                <div *ngIf="activeSettingsTab === 'virtualBg'" class="tab-content virtual-bg-tab">
+                    <div class="virtual-bg-options">
+                        <div *ngFor="let option of virtualBackgroundOptions" 
+                             class="virtual-bg-option"
+                             [class.selected]="pendingVirtualBg?.type === option.type && 
+                                             (pendingVirtualBg?.value === option.value || 
+                                              (!pendingVirtualBg?.value && !option.value))"
+                             (click)="selectVirtualBackground(option)">
+                            <div class="option-preview">
+                                <img *ngIf="option.thumbnail" [src]="option.thumbnail" [alt]="option.label">
+                                <div *ngIf="option.type === 'blur'" class="blur-preview">
+                                    <div class="blur-circle"></div>
+                                </div>
+                                <div *ngIf="option.type === 'none'" class="none-preview">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"
+                                        fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                                    </svg>
+                                </div>
+                                <div *ngIf="pendingVirtualBg?.type === option.type && 
+                                           (pendingVirtualBg?.value === option.value || 
+                                            (!pendingVirtualBg?.value && !option.value))" 
+                                     class="selected-indicator">
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                    </svg>
+                                </div>
+                            </div>
+                            <span class="option-label">{{ option.label }}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Footer -->
+            <div class="settings-footer">
+                <button class="btn btn-secondary" 
+                        [disabled]="isSavingSettings"
+                        (click)="cancelSettingsChanges()">
+                    Cancel
+                </button>
+                <button class="btn btn-primary" 
+                        [disabled]="isSavingSettings"
+                        (click)="saveSettingsChanges()">
+                    <span *ngIf="!isSavingSettings">Save Changes</span>
+                    <span *ngIf="isSavingSettings" class="saving-content">
+                        <svg class="spinner-icon" width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M12,1A11,11,0,1,0,23,12,11,11,0,0,0,12,1Zm0,19a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z" opacity=".25"/>
+                            <path d="M12,4a8,8,0,0,1,7.89,6.7A1.53,1.53,0,0,0,21.38,12h0a1.5,1.5,0,0,0,1.48-1.75,11,11,0,0,0-21.72,0A1.5,1.5,0,0,0,2.62,12h0a1.53,1.53,0,0,0,1.49-1.3A8,8,0,0,1,12,4Z"/>
+                        </svg>
+                        Saving...
+                    </span>
+                </button>
             </div>
         </div>
     </div>
@@ -374,12 +510,13 @@
                 <!-- Screen Share Toggle -->
                 <button 
                     (click)="toggleScreenShare()"
-                    class="p-2 rounded-lg transition-all duration-200 hover:scale-105"
+                    [disabled]="isScreenShareDisabled()"
+                    class="p-2 rounded-lg transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
                     [class]="{
-                        'bg-purple-500 hover:bg-purple-600 text-white': isScreenSharing,
-                        'bg-gray-500 hover:bg-gray-600 text-white': !isScreenSharing
+                        'bg-purple-500 hover:bg-purple-600 text-white': isScreenSharing && !isScreenShareDisabled(),
+                        'bg-gray-500 hover:bg-gray-600 text-white': !isScreenSharing && !isScreenShareDisabled()
                     }"
-                    [title]="isScreenSharing ? 'Stop Screen Share' : 'Start Screen Share'"
+                    [title]="getScreenShareTooltip()"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="2" y="4" width="20" height="16" rx="2"></rect>

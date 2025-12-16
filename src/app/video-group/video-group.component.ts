@@ -71,6 +71,36 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     currentVirtualBg: VirtualBackgroundType = 'none';
     currentVirtualBgValue: string | null = null;
     isLoadingVirtualBg: boolean = false;
+    
+    // NEW: Settings Modal State
+    showSettingsModal: boolean = false;
+    activeSettingsTab: 'video' | 'audio' | 'virtualBg' = 'video';
+    
+    // Preview and device state
+    previewStream: MediaStream | null = null;
+    availableVideoDevices: MediaDeviceInfo[] = [];
+    availableAudioDevices: MediaDeviceInfo[] = [];
+    
+    // Pending changes (not applied until Save)
+    pendingVideoDeviceId: string = '';
+    pendingAudioDeviceId: string = '';
+    pendingVirtualBg: VirtualBackgroundOption | null = null;
+    pendingMirror: boolean = false;
+    
+    // Current active settings
+    currentVideoDeviceId: string = '';
+    currentAudioDeviceId: string = '';
+    isMirrored: boolean = false;
+    
+    // Loading states
+    isSavingSettings: boolean = false;
+    
+    // Audio meter for preview
+    audioContext: AudioContext | null = null;
+    audioAnalyser: AnalyserNode | null = null;
+    audioDataArray: Uint8Array | null = null;
+    audioLevelInterval: any = null;
+    currentAudioLevel: number = 0;
     localParticipantRole: 'backstage' | 'stage' = 'backstage';
     participantRoles: { [sessionId: string]: 'backstage' | 'stage' } = {};
     layouts: any = [];
@@ -304,6 +334,9 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
         if (this.screenshareHealthCheckInterval) {
             clearInterval(this.screenshareHealthCheckInterval);
         }
+        
+        // Clean up settings modal resources
+        this.cleanupPreviewResources();
         
         // Unsubscribe from live stream service
         if (this.liveStreamSubscription) {
@@ -1988,9 +2021,346 @@ export class VideoGroupComponent implements OnInit, OnDestroy {
     }
 
     toggleVirtualBgMenu(): void {
-        this.showVirtualBgMenu = !this.showVirtualBgMenu;
-        // Reset loading state to prevent hanging spinner if menu was closed while loading
-        this.isLoadingVirtualBg = false;
+        this.openSettingsModal('virtualBg');
+    }
+    
+    // NEW: Settings Modal Methods
+    openSettingsModal(tab: 'video' | 'audio' | 'virtualBg' = 'video'): void {
+        this.showSettingsModal = true;
+        this.activeSettingsTab = tab;
+        this.initializeSettingsModal();
+    }
+    
+    closeSettingsModal(): void {
+        this.cleanupPreviewResources();
+        // DON'T reset pending changes on close - only on cancel or save
+        this.isSavingSettings = false;
+        this.showSettingsModal = false;
+        this.cdr.detectChanges();
+    }
+    
+    private async initializeSettingsModal(): Promise<void> {
+        try {
+            // Enumerate devices
+            await this.loadAvailableDevices();
+            
+            // Initialize current settings
+            await this.loadCurrentDeviceSettings();
+            
+            // Reset pending changes to current settings ONLY on first open
+            this.resetPendingChanges();
+            
+            console.log('🔧 Initialized pending settings:', {
+                video: this.pendingVideoDeviceId,
+                audio: this.pendingAudioDeviceId,
+                mirror: this.pendingMirror
+            });
+            
+            // Start preview for active tab
+            if (this.activeSettingsTab === 'video') {
+                await this.startVideoPreview();
+            } else if (this.activeSettingsTab === 'audio') {
+                await this.startAudioPreview();
+            }
+            
+            this.cdr.detectChanges();
+        } catch (error) {
+            console.error('❌ Error initializing settings modal:', error);
+            this.error = 'Failed to load device settings';
+        }
+    }
+    
+    private async loadAvailableDevices(): Promise<void> {
+        try {
+            const devices = await navigator.mediaDevices.enumerateDevices();
+            this.availableVideoDevices = devices.filter(d => d.kind === 'videoinput');
+            this.availableAudioDevices = devices.filter(d => d.kind === 'audioinput');
+            console.log('📱 Loaded devices:', {
+                video: this.availableVideoDevices.length,
+                audio: this.availableAudioDevices.length
+            });
+        } catch (error) {
+            console.error('❌ Error loading devices:', error);
+            throw error;
+        }
+    }
+    
+    private async loadCurrentDeviceSettings(): Promise<void> {
+        if (!this.callObject) return;
+        
+        try {
+            const inputSettings = await this.callObject.getInputSettings();
+            this.currentVideoDeviceId = (inputSettings.video as any)?.deviceId || '';
+            this.currentAudioDeviceId = (inputSettings.audio as any)?.deviceId || '';
+            
+            console.log('⚙️ Current device settings:', {
+                video: this.currentVideoDeviceId,
+                audio: this.currentAudioDeviceId,
+                virtualBg: this.currentVirtualBg
+            });
+        } catch (error) {
+            console.error('❌ Error loading current settings:', error);
+        }
+    }
+    
+    private resetPendingChanges(): void {
+        this.pendingVideoDeviceId = this.currentVideoDeviceId;
+        this.pendingAudioDeviceId = this.currentAudioDeviceId;
+        this.pendingMirror = this.isMirrored;
+        this.pendingVirtualBg = this.virtualBackgroundOptions.find(opt => 
+            opt.type === this.currentVirtualBg && 
+            (opt.value === this.currentVirtualBgValue || (!opt.value && !this.currentVirtualBgValue))
+        ) || this.virtualBackgroundOptions[0];
+    }
+    
+    switchSettingsTab(tab: 'video' | 'audio' | 'virtualBg'): void {
+        console.log('🔄 Switching to tab:', tab, 'Current pending:', {
+            video: this.pendingVideoDeviceId,
+            audio: this.pendingAudioDeviceId
+        });
+        
+        // Clean up current tab's resources
+        this.cleanupPreviewResources();
+        
+        this.activeSettingsTab = tab;
+        
+        // Start preview for new tab - DON'T reset pending changes
+        setTimeout(() => {
+            if (tab === 'video') {
+                this.startVideoPreview();
+            } else if (tab === 'audio') {
+                this.startAudioPreview();
+            }
+        }, 100);
+        
+        this.cdr.detectChanges();
+    }
+    
+    private async startVideoPreview(): Promise<void> {
+        try {
+            if (this.previewStream) {
+                this.cleanupPreviewResources();
+            }
+            
+            const constraints: MediaStreamConstraints = {
+                video: {
+                    deviceId: this.pendingVideoDeviceId ? { exact: this.pendingVideoDeviceId } : undefined,
+                    width: { ideal: 640 },
+                    height: { ideal: 480 }
+                },
+                audio: false
+            };
+            
+            this.previewStream = await navigator.mediaDevices.getUserMedia(constraints);
+            
+            // Apply to preview video element
+            const previewVideo = document.getElementById('settingsVideoPreview') as HTMLVideoElement;
+            if (previewVideo) {
+                previewVideo.srcObject = this.previewStream;
+                previewVideo.play();
+            }
+            
+            console.log('📹 Video preview started');
+        } catch (error) {
+            console.error('❌ Error starting video preview:', error);
+            this.error = 'Failed to start video preview';
+        }
+    }
+    
+    private async startAudioPreview(): Promise<void> {
+        try {
+            if (this.previewStream) {
+                this.cleanupPreviewResources();
+            }
+            
+            const constraints: MediaStreamConstraints = {
+                audio: {
+                    deviceId: this.pendingAudioDeviceId ? { exact: this.pendingAudioDeviceId } : undefined
+                },
+                video: false
+            };
+            
+            this.previewStream = await navigator.mediaDevices.getUserMedia(constraints);
+            
+            // Set up audio analysis
+            this.setupAudioMeter();
+            
+            console.log('🎤 Audio preview started');
+        } catch (error) {
+            console.error('❌ Error starting audio preview:', error);
+            this.error = 'Failed to start audio preview';
+        }
+    }
+    
+    private setupAudioMeter(): void {
+        if (!this.previewStream) return;
+        
+        try {
+            this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const source = this.audioContext.createMediaStreamSource(this.previewStream);
+            this.audioAnalyser = this.audioContext.createAnalyser();
+            
+            this.audioAnalyser.fftSize = 256;
+            const bufferLength = this.audioAnalyser.frequencyBinCount;
+            this.audioDataArray = new Uint8Array(new ArrayBuffer(bufferLength));
+            
+            source.connect(this.audioAnalyser);
+            
+            // Start monitoring audio levels
+            this.audioLevelInterval = setInterval(() => {
+                if (this.audioAnalyser && this.audioDataArray) {
+                    this.audioAnalyser.getByteFrequencyData(this.audioDataArray as any);
+                    
+                    // Calculate average level
+                    let sum = 0;
+                    for (let i = 0; i < this.audioDataArray.length; i++) {
+                        sum += this.audioDataArray[i];
+                    }
+                    this.currentAudioLevel = (sum / this.audioDataArray.length) / 255;
+                    this.cdr.detectChanges();
+                }
+            }, 100);
+            
+        } catch (error) {
+            console.error('❌ Error setting up audio meter:', error);
+        }
+    }
+    
+    private cleanupPreviewResources(): void {
+        // Stop preview stream
+        if (this.previewStream) {
+            this.previewStream.getTracks().forEach(track => {
+                track.stop();
+            });
+            this.previewStream = null;
+        }
+        
+        // Clean up audio context
+        if (this.audioContext) {
+            this.audioContext.close();
+            this.audioContext = null;
+        }
+        
+        if (this.audioLevelInterval) {
+            clearInterval(this.audioLevelInterval);
+            this.audioLevelInterval = null;
+        }
+        
+        this.audioAnalyser = null;
+        this.audioDataArray = null;
+        this.currentAudioLevel = 0;
+    }
+    
+    // Device selection handlers
+    onVideoDeviceChange(event: Event): void {
+        const target = event.target as HTMLSelectElement;
+        this.pendingVideoDeviceId = target.value;
+        console.log('📹 Video device changed to:', target.value, 'Pending:', this.pendingVideoDeviceId);
+        // Force change detection to update UI
+        this.cdr.detectChanges();
+        // Restart preview with new device
+        if (this.activeSettingsTab === 'video') {
+            this.startVideoPreview();
+        }
+    }
+    
+    onAudioDeviceChange(event: Event): void {
+        const target = event.target as HTMLSelectElement;
+        this.pendingAudioDeviceId = target.value;
+        console.log('🎤 Audio device changed to:', target.value, 'Pending:', this.pendingAudioDeviceId);
+        // Force change detection to update UI
+        this.cdr.detectChanges();
+        // Restart preview with new device
+        if (this.activeSettingsTab === 'audio') {
+            this.startAudioPreview();
+        }
+    }
+    
+    onMirrorToggle(): void {
+        this.pendingMirror = !this.pendingMirror;
+        this.cdr.detectChanges();
+    }
+    
+    selectVirtualBackground(option: VirtualBackgroundOption): void {
+        this.pendingVirtualBg = option;
+        this.cdr.detectChanges();
+    }
+    
+    cancelSettingsChanges(): void {
+        // Reset pending changes back to current settings on cancel
+        this.resetPendingChanges();
+        this.closeSettingsModal();
+    }
+    
+    isScreenShareDisabled(): boolean {
+        // Disable if user is in backstage
+        if (this.localParticipantRole === 'backstage') {
+            return true;
+        }
+        
+        // Disable if someone else is already sharing screen
+        if (this.screenSharingParticipant && !this.screenSharingParticipant.local) {
+            return true;
+        }
+        
+        return false;
+    }
+    
+    getScreenShareTooltip(): string {
+        if (this.localParticipantRole === 'backstage') {
+            return 'Screen sharing only available on stage';
+        }
+        
+        if (this.screenSharingParticipant && !this.screenSharingParticipant.local) {
+            return `${this.screenSharingParticipant.userName} is already sharing screen`;
+        }
+        
+        return this.isScreenSharing ? 'Stop Screen Share' : 'Start Screen Share';
+    }
+    
+    async saveSettingsChanges(): Promise<void> {
+        if (!this.callObject || this.isSavingSettings) return;
+        
+        this.isSavingSettings = true;
+        this.cdr.detectChanges();
+        
+        try {
+            console.log('💾 Saving settings changes...');
+            
+            // Apply device changes
+            if (this.pendingVideoDeviceId !== this.currentVideoDeviceId || 
+                this.pendingAudioDeviceId !== this.currentAudioDeviceId) {
+                
+                await this.callObject.setInputDevicesAsync({
+                    audioDeviceId: this.pendingAudioDeviceId,
+                    videoDeviceId: this.pendingVideoDeviceId
+                });
+                
+                this.currentVideoDeviceId = this.pendingVideoDeviceId;
+                this.currentAudioDeviceId = this.pendingAudioDeviceId;
+            }
+            
+            // Apply virtual background
+            if (this.pendingVirtualBg && 
+                (this.pendingVirtualBg.type !== this.currentVirtualBg || 
+                 this.pendingVirtualBg.value !== this.currentVirtualBgValue)) {
+                
+                await this.applyVirtualBackground(this.pendingVirtualBg);
+            }
+            
+            // Apply mirror setting
+            this.isMirrored = this.pendingMirror;
+            
+            console.log('✅ Settings saved successfully');
+            this.closeSettingsModal();
+            
+        } catch (error) {
+            console.error('❌ Error saving settings:', error);
+            this.error = `Failed to save settings: ${error instanceof Error ? error.message : 'Please try again.'}`;
+        } finally {
+            this.isSavingSettings = false;
+            this.cdr.detectChanges();
+        }
     }
     
     // NEW: Handle overlay toggle from service
